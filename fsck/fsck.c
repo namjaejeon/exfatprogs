@@ -5,7 +5,7 @@
 
 #include <stdio.h>
 
-#include "exfat.h"
+#include "exfat_ondisk.h"
 
 int main()
 {

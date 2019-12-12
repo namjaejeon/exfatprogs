@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- * Copyright (C) 2012-2013 Samsung Electronics Co., Ltd.
+ *  Copyright (C) 2019 Namjae Jeon <linkinjeon@gmail.com>
  */
 
 #ifndef _EXFAT_H
@@ -89,6 +89,14 @@ typedef uint8_t	__u8;
 #define ATTR_SUBDIR_LE		cpu_to_le16(0x0010)
 #define ATTR_ARCHIVE_LE		cpu_to_le16(0x0020)
 
+#define CLUSTER_32(x)			((unsigned int)((x) & 0xFFFFFFFFU))
+#define EXFAT_EOF_CLUSTER		CLUSTER_32(~0)
+#define EXFAT_BAD_CLUSTER		(0xFFFFFFF7U)
+#define EXFAT_FREE_CLUSTER		(0)
+#define EXFAT_FIRST_CLUSTER		(2)
+#define EXFAT_REVERVED_CLUSTERS		(2)
+
+
 /* EXFAT BIOS parameter block (64 bytes) */
 struct bpb64 {
 	__u8 jmp_boot[3];
@@ -116,29 +124,34 @@ struct bsx64 {
 	__u8 reserved2[7];
 };
 
-/* EXFAT PBR[BPB+BSX] (120 bytes) */
-struct pbr64 {
-	struct bpb64 bpb;
-	struct bsx64 bsx;
-};
-
 /* Common PBR[Partition Boot Record] (512 bytes) */
 struct pbr {
-	union {
-		__u8 raw[64];
-		struct bpb64 f64;
-	} bpb;
-	union {
-		__u8 raw[56];
-		struct bsx64 f64;
-	} bsx;
+	struct bpb64 bpb;
+	struct bsx64 bsx;
 	__u8 boot_code[390];
 	__le16 signature;
+};
+
+/* Extended Boot Sector */
+struct exbs {
+	__u8 zero[510];
+	__le16 signature;
+};
+
+/* Extended Boot Record (8 sectors) */
+struct expbr {
+	struct exbs eb[8];
 };
 
 struct exfat_dentry {
 	__u8 type;
 	union {
+		struct {
+			__u8 character_count;
+			__u8 volume_label[22];
+			__u8 reserved[8];
+		} __attribute__((packed)) vol; /* file directory entry */
+
 		struct {
 			__u8 num_ext;
 			__le16 checksum;
@@ -186,6 +199,8 @@ struct exfat_dentry {
 	} __attribute__((packed)) dentry;
 } __attribute__((packed));
 
+#define vol_char_cnt			dentry.vol.character_count
+#define vol_label			dentry.vol.volume_label
 #define file_num_ext			dentry.file.num_ext
 #define file_checksum			dentry.file.checksum
 #define file_attr			dentry.file.attr
