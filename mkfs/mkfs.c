@@ -362,11 +362,10 @@ static void make_exfat_layout_info(struct exfat_blk_dev *bd,
 		DEFAULT_CLUSTER_SIZE);
 	finfo.total_clu_cnt = (bd->size - finfo.clu_byte_off) / ui->cluster_size;
 	finfo.bitmap_byte_off = EXFAT_REVERVED_CLUSTERS * ui->cluster_size;
-	finfo.bitmap_byte_len =
-		round_up((bd->num_clusters / 8) , ui->cluster_size);
+	finfo.bitmap_byte_len = round_up(finfo.total_clu_cnt, 8) / 8;
 	finfo.ut_byte_off = finfo.bitmap_byte_off + finfo.bitmap_byte_len;
 	finfo.ut_start_clu = finfo.ut_byte_off / ui->cluster_size;
-	finfo.ut_byte_len = round_up(EXFAT_UPCASE_TABLE_SIZE, ui->cluster_size);
+	finfo.ut_byte_len = EXFAT_UPCASE_TABLE_SIZE;
 	finfo.root_byte_off = finfo.ut_byte_off + finfo.ut_byte_len;
 	finfo.root_start_clu = finfo.root_byte_off / ui->cluster_size;
 	finfo.root_byte_len = sizeof(struct exfat_dentry) * 3;
