@@ -347,11 +347,9 @@ static int verify_user_input(struct exfat_blk_dev *bd,
 	return 0;
 }
 
-static void make_exfat_layout_info(struct exfat_blk_dev *bd,
+static void exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
-	int num_bitmap_clu;
-
 	if (DEFAULT_CLUSTER_SIZE < ui->sec_per_clu)
 		finfo.fat_byte_off = ui->cluster_size;
 	else
@@ -418,7 +416,7 @@ int main(int argc, char *argv[])
 	if (ret < 0)
 		goto out;
 
-	make_exfat_layout_info(&bd, &ui);
+	exfat_build_mkfs_info(&bd, &ui);
 
 	ret = exfat_create_volume_boot_record(&bd, &ui);
 	if (ret)
