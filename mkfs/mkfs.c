@@ -195,8 +195,12 @@ static int write_fat_entry(int fd, unsigned int entry,
 
 	lseek(fd, finfo.fat_byte_off + (offset * sizeof(int)), SEEK_SET);
 	nbyte = write(fd, (char *) &entry, sizeof(unsigned int));
-	if (nbyte != sizeof(int))
+	if (nbyte != sizeof(int)) {
+		exfat_msg(EXFAT_ERROR,
+			"write failed, offset : %llu, entry : %x\n",
+			offset, entry);
 		return -1;
+	}
 }
 
 static int exfat_create_fat_table(struct exfat_blk_dev *bd,
@@ -216,7 +220,9 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 		return ret;
 
 	/* write bitmap entries */
-	count = EXFAT_FIRST_CLUSTER + (finfo.bitmap_byte_len / ui->cluster_size);
+	count = EXFAT_FIRST_CLUSTER;
+	count += round_up(finfo.bitmap_byte_len, ui->cluster_size) /
+		ui->cluster_size;
 	for (clu = EXFAT_FIRST_CLUSTER; clu < count; clu++) {
 		ret = write_fat_entry(bd->dev_fd, clu, clu * sizeof(int));
 		if (ret)
@@ -224,7 +230,8 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 	}
 
 	/* write upcase table entries */
-	count += finfo.ut_byte_len / ui->cluster_size;
+	count += round_up(finfo.ut_byte_len, ui->cluster_size) /
+		ui->cluster_size;
 	finfo.ut_start_clu = clu;
 	for (; clu < count; clu++) {
 		ret = write_fat_entry(bd->dev_fd, clu, clu);
@@ -395,6 +402,7 @@ int main(int argc, char *argv[])
 			}
 			break;
                 case 'v':
+			print_level = EXFAT_DEBUG;
                         break;
                 case '?':
                 case 'h':

@@ -44,4 +44,21 @@ void exfat_set_bit(struct exfat_blk_dev *bd, char *bitmap,
 void exfat_clear_bit(struct exfat_blk_dev *bd, char *bitmap,
 		unsigned int clu);
 
+/*
+ * Exfat Print
+ */
+
+unsigned int print_level;
+
+#define EXFAT_ERROR	(0)
+#define EXFAT_DEBUG	(1)
+
+#define exfat_msg(level, fmt, ...)					\
+	do {								\
+		if (print_level >= level) {				\
+			printf("[%s:%4d] " fmt,				\
+				__func__, __LINE__, ##__VA_ARGS__);	\
+		}							\
+	} while (0)							\
+
 #endif /* !_EXFA_TOOLS_H */
