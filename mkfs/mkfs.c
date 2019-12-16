@@ -304,7 +304,7 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui, struct exfat_blk_dev *bd
 	int fd, ret = -1;
 	unsigned long long blk_dev_size;
 
-	fd = open(ui->dev_name, O_RDONLY);
+	fd = open(ui->dev_name, O_RDWR);
 	if (fd < 0)
 		return -1;
 
