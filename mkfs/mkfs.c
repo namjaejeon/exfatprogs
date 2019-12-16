@@ -57,7 +57,7 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	pbsx->vol_serial = 1234;
 	pbsx->vol_flags = 0;
 	pbsx->sect_size_bits = bd->sector_size_bits;
-	pbsx->sect_per_clus_bits = ui->sec_per_clu;
+	pbsx->sect_per_clus_bits = ui->sec_per_clu / 32;
 	pbsx->num_fats = 1;
 	/* fs_version[0] : minor and fs_version[1] : major */
 	pbsx->fs_version[0] = 0;
@@ -363,8 +363,7 @@ static void make_exfat_layout_info(struct exfat_blk_dev *bd,
 	finfo.total_clu_cnt = (bd->size - finfo.clu_byte_off) / ui->cluster_size;
 	finfo.bitmap_byte_off = EXFAT_REVERVED_CLUSTERS * ui->cluster_size;
 	finfo.bitmap_byte_len =
-		round_up((bd->num_clusters / 8) , ui->cluster_size) *
-		ui->cluster_size;
+		round_up((bd->num_clusters / 8) , ui->cluster_size);
 	finfo.ut_byte_off = finfo.bitmap_byte_off + finfo.bitmap_byte_len;
 	finfo.ut_start_clu = finfo.ut_byte_off / ui->cluster_size;
 	finfo.ut_byte_len = round_up(EXFAT_UPCASE_TABLE_SIZE, ui->cluster_size);
@@ -380,6 +379,12 @@ int main(int argc, char *argv[])
 	char *blk_dev_name;
 	struct exfat_blk_dev bd;
 	struct exfat_user_input ui;
+
+	/*
+	 * Default cluster size, Need to adjust default cluster size
+	 * according to device size
+	 */
+	ui.cluster_size = 128 * 1024;
 
         opterr = 0;
         while ((c = getopt(argc, argv, "s:vh")) != EOF)
