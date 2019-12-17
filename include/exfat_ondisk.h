@@ -8,15 +8,11 @@
 
 #include <endian.h>
 #include <stdint.h>
+#include <linux/fs.h>
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
-
-typedef uint16_t __le16;
-typedef uint32_t __le32;
-typedef uint64_t __le64;
-typedef uint8_t	__u8;
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 #define cpu_to_le16(x)	(x)

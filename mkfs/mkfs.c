@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <errno.h>
@@ -88,7 +89,7 @@ static int exfat_write_boot_sectors(struct exfat_blk_dev *bd,
 
 	ppbr = malloc(sizeof(struct pbr));
 	if (!ppbr) {
-		printf("Cannot allocate pbr: out of memory\n");
+		exfat_msg(EXFAT_ERROR, "Cannot allocate pbr: out of memory\n");
 		return -1;
 	}
 	memset(ppbr, 0, sizeof(struct pbr));
@@ -306,7 +307,17 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 	return 0;
 }
 
-int exfat_get_blk_dev_info(struct exfat_user_input *ui, struct exfat_blk_dev *bd)
+static inline unsigned int sector_size_bits(unsigned int size)
+{
+	unsigned int bits = 8;
+	do {
+		bits++;
+		size >>= 1;
+	} while (size > 256);
+	return bits;
+}
+
+static int exfat_get_blk_dev_info(struct exfat_user_input *ui, struct exfat_blk_dev *bd)
 {
 	int fd, ret = -1;
 	unsigned long long blk_dev_size;
@@ -322,13 +333,11 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui, struct exfat_blk_dev *bd
 	}
 
 	bd->size = blk_dev_size;
-	bd->sector_size = DEFAULT_SECTOR_SIZE;
-	bd->sector_size_bits = 9;
+
+	if (ioctl(fd, BLKSSZGET, &bd->sector_size) < 0)
+		bd->sector_size = DEFAULT_SECTOR_SIZE;
+	bd->sector_size_bits = sector_size_bits(bd->sector_size);
 	bd->num_sectors = blk_dev_size / DEFAULT_SECTOR_SIZE;
-	if (bd->num_sectors < MIN_NUM_SECTOR) {
-		printf(" \n");
-		goto out;
-	}
 	bd->num_clusters = blk_dev_size / ui->cluster_size;
 
 	ret = 0;
