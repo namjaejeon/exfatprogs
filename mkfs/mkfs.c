@@ -333,7 +333,6 @@ static int exfat_get_blk_dev_info(struct exfat_user_input *ui, struct exfat_blk_
 	}
 
 	bd->size = blk_dev_size;
-
 	if (ioctl(fd, BLKSSZGET, &bd->sector_size) < 0)
 		bd->sector_size = DEFAULT_SECTOR_SIZE;
 	bd->sector_size_bits = sector_size_bits(bd->sector_size);
@@ -371,17 +370,19 @@ static struct option opts[] = {
 	{NULL,			0,			NULL,	 0  }
 };
 
+static void init_user_input(struct exfat_user_input *ui)
+{
+	memset(ui, 0, sizeof(struct exfat_user_input));
+	/*
+	 * Default cluster size, Need to adjust default cluster size
+	 * according to device size
+	 */
+	ui->cluster_size = 128 * 1024;
+}
+
 static int verify_user_input(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
-	if (!ui->cluster_size) {
-		/*
-		 * Default cluster size, Need to adjust default cluster size
-		 * according to device size
-		 */
-		ui->cluster_size = 128 * 1024;
-	}
-
 	ui->sec_per_clu = ui->cluster_size / bd->sector_size;
 	return 0;
 }
@@ -416,7 +417,7 @@ int main(int argc, char *argv[])
 	struct exfat_blk_dev bd;
 	struct exfat_user_input ui;
 
-	memset(&ui, 0, sizeof(struct exfat_user_input));
+	init_user_input(&ui);
 
         opterr = 0;
         while ((c = getopt_long(argc, argv, "c:Vvh", opts, NULL)) != EOF)
@@ -424,8 +425,9 @@ int main(int argc, char *argv[])
                 case 'c':
 			ui.cluster_size = atoi(optarg);
 			if (ui.cluster_size > MAX_CLUSTER_SIZE) {
-				printf("cluster size(%d) exceeds max cluster size(%d)",
-						ui.cluster_size, MAX_CLUSTER_SIZE);
+				exfat_msg(EXFAT_ERROR,
+					"cluster size(%d) exceeds max cluster size(%d)",
+					ui.cluster_size, MAX_CLUSTER_SIZE);
 				goto out;
 			}
 			break;
