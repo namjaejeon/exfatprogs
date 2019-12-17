@@ -340,8 +340,10 @@ out:
 static void usage(void)
 {       
 	fprintf(stderr, "Usage: mkfs.exfat\n");
-
+	fprintf(stderr, "\t-c | --cluster-size\n");
+	fprintf(stderr, "\t-V | --version\n");
 	fprintf(stderr, "\t-v | --verbose\n");
+	fprintf(stderr, "\t-h | --help\n");
 
 	exit(EXIT_FAILURE);
 }
@@ -351,6 +353,14 @@ static void show_version(void)
 	printf("exfat-tools version : %s\n", EXFAT_TOOLS_VERSION);
 	exit(EXIT_FAILURE);
 }
+
+static struct option opts[] = {
+	{"cluster-size",	required_argument,	NULL,	'c' },
+	{"version",		no_argument,		NULL,	'V' },
+	{"help",		no_argument,		NULL,	'h' },
+	{"?",			no_argument,		NULL,	'?' },
+	{NULL,			0,			NULL,	 0  }
+};
 
 static int verify_user_input(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
@@ -398,7 +408,7 @@ int main(int argc, char *argv[])
 	struct exfat_user_input ui;
 
         opterr = 0;
-        while ((c = getopt(argc, argv, "s:vh")) != EOF)
+        while ((c = getopt_long(argc, argv, "c:Vvh", opts, NULL)) != EOF)
                 switch (c) {
                 case 'c':
 			ui.cluster_size = atoi(optarg);
