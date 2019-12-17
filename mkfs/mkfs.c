@@ -407,6 +407,8 @@ int main(int argc, char *argv[])
 	struct exfat_blk_dev bd;
 	struct exfat_user_input ui;
 
+	memset(&ui, 0, sizeof(struct exfat_user_input));
+
         opterr = 0;
         while ((c = getopt_long(argc, argv, "c:Vvh", opts, NULL)) != EOF)
                 switch (c) {
