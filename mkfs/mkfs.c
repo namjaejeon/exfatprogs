@@ -350,6 +350,14 @@ static void usage(void)
 static int verify_user_input(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
+	if (!ui.ui.cluster_size) {
+		/*
+		 * Default cluster size, Need to adjust default cluster size
+		 * according to device size
+		 */
+		ui.cluster_size = 128 * 1024;
+	}
+
 	ui->sec_per_clu = ui->cluster_size / bd->sector_size;
 	return 0;
 }
@@ -383,12 +391,6 @@ int main(int argc, char *argv[])
 	char *blk_dev_name;
 	struct exfat_blk_dev bd;
 	struct exfat_user_input ui;
-
-	/*
-	 * Default cluster size, Need to adjust default cluster size
-	 * according to device size
-	 */
-	ui.cluster_size = 128 * 1024;
 
         opterr = 0;
         while ((c = getopt(argc, argv, "s:vh")) != EOF)
