@@ -76,8 +76,11 @@ static int exfat_write_sector(struct exfat_blk_dev *bd, void *buf, unsigned int 
 
 	lseek(bd->dev_fd, offset, SEEK_SET);
 	bytes = write(bd->dev_fd, buf, bd->sector_size);
-	if (bytes != bd->sector_size)
+	if (bytes != bd->sector_size) {
+		exfat_msg(EXFAT_ERROR,
+			"write failed, sec_off : %u, bytes : %d\n", sec_off, bytes);
 		return -1;
+	}
 	return 0;
 }
 
@@ -99,14 +102,16 @@ static int exfat_write_boot_sectors(struct exfat_blk_dev *bd,
 	/* write main boot sector */
 	ret = exfat_write_sector(bd, ppbr, 0);
 	if (ret < 0) {
-		ret = -1;
+		exfat_msg(EXFAT_ERROR,
+			"main boot sector write failed\n");
 		goto free_ppbr;
 	}
 
 	/* write backup boot sector */
 	ret = exfat_write_sector(bd, ppbr, 1);
 	if (ret < 0) {
-		ret = -1;
+		exfat_msg(EXFAT_ERROR,
+			"main backup sector write failed\n");
 		goto free_ppbr;
 	}
 
@@ -128,8 +133,11 @@ static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
 		int ret;
 
 		ep.eb[sec_idx - 1].signature = cpu_to_le16(0xAA55);
-		if (exfat_write_sector(bd, &ep, sec_idx))
+		if (exfat_write_sector(bd, &ep, sec_idx)) {
+			exfat_msg(EXFAT_ERROR,
+				"extended boot sector write failed\n");
 			return -1;
+		}
 
 		calc_checksum((char *) &ep, sizeof(struct expbr), false, checksum);
 	}
@@ -147,8 +155,11 @@ static int exfat_write_oem_sector(struct exfat_blk_dev *bd,
 		return -1;
 
 	memset(oem, 0xFF, bd->sector_size);
-	if (exfat_write_sector(bd, oem, OEM_SEC_NUM))
+	if (exfat_write_sector(bd, oem, OEM_SEC_NUM)) {
+		exfat_msg(EXFAT_ERROR,
+			"oem sector write failed\n");
 		return -1;
+	}
 
 	calc_checksum((char *)oem, bd->sector_size, false, checksum);
 }
@@ -163,8 +174,11 @@ static int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
 		return -1;
 
 	memset(checksum_buf, checksum, bd->sector_size / sizeof(int));
-	if (exfat_write_sector(bd, checksum_buf, OEM_SEC_NUM))
+	if (exfat_write_sector(bd, checksum_buf, OEM_SEC_NUM)) {
+		exfat_msg(EXFAT_ERROR,
+			"checksum sector write failed\n");
 		return -1;
+	}
 }
 
 static int exfat_create_volume_boot_record(struct exfat_blk_dev *bd,
@@ -212,22 +226,31 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 
 	/* fat entry 0 should be media type field(0xF8) */
 	ret = write_fat_entry(bd->dev_fd, 0xfffffff8, 0);
-	if (ret)
+	if (ret) {
+		exfat_msg(EXFAT_ERROR,
+			"fat 0 entry write failed\n");
 		return ret;
+	}
 
 	/* fat entry 1 is historical precedence(0xFFFFFFFF) */
 	ret = write_fat_entry(bd->dev_fd, 0xffffffff, 1);
-	if (ret)
+	if (ret) {
+		exfat_msg(EXFAT_ERROR,
+			"fat 1 entry write failed\n");
 		return ret;
+	}
 
 	/* write bitmap entries */
 	count = EXFAT_FIRST_CLUSTER;
 	count += round_up(finfo.bitmap_byte_len, ui->cluster_size) /
 		ui->cluster_size;
 	for (clu = EXFAT_FIRST_CLUSTER; clu < count; clu++) {
-		ret = write_fat_entry(bd->dev_fd, clu, clu * sizeof(int));
-		if (ret)
+		ret = write_fat_entry(bd->dev_fd, clu, clu);
+		if (ret) {
+			exfat_msg(EXFAT_ERROR,
+				"bitmap entry write failed, clu : %d\n", clu);
 			return ret;
+		}
 	}
 
 	/* write upcase table entries */
@@ -236,8 +259,11 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 	finfo.ut_start_clu = clu;
 	for (; clu < count; clu++) {
 		ret = write_fat_entry(bd->dev_fd, clu, clu);
-		if (ret)
+		if (ret) {
+			exfat_msg(EXFAT_ERROR,
+				"upcase entry write failed, clu : %d\n", clu);
 			return ret;
+		}
 	}
 
 	/* write root directory entries */
@@ -245,11 +271,15 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 	finfo.root_start_clu = clu;
 	for (; clu < count; clu++) {
 		ret = write_fat_entry(bd->dev_fd, clu, clu);
-		if (ret)
+		if (ret) {
+			exfat_msg(EXFAT_ERROR,
+				"root entry write failed, clu : %d\n", clu);
+		}
 			return ret;
 	}
 
 	finfo.used_clu_cnt = count;
+	exfat_msg(EXFAT_DEBUG, "Total used cluster count : %d\n", count);
 
 	return ret;
 }
@@ -258,7 +288,7 @@ static int exfat_create_bitmap(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
 	char *bitmap;
-	int i,nbytes;
+	int i, nbytes;
 
 	bitmap = malloc(finfo.bitmap_byte_len);
 	if (!bitmap)
@@ -270,6 +300,9 @@ static int exfat_create_bitmap(struct exfat_blk_dev *bd,
 	lseek(bd->dev_fd, finfo.bitmap_byte_off, SEEK_SET);
 	nbytes = write(bd->dev_fd, bitmap, finfo.bitmap_byte_len);
 	if (nbytes != finfo.bitmap_byte_len)
+		exfat_msg(EXFAT_ERROR,
+			"write failed, nbytes : %d, bitmap_len : %d\n",
+			nbytes, finfo.bitmap_byte_len);
 		return -1;
 
 	return 0;
@@ -301,8 +334,12 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 
 	lseek(bd->dev_fd, finfo.root_byte_off, SEEK_SET);
 	nbytes = write(bd->dev_fd, ed, dentries_len);
-	if (nbytes != dentries_len)
+	if (nbytes != dentries_len) {
+		exfat_msg(EXFAT_ERROR,
+			"write failed, nbytes : %d, dentries_len : %d\n",
+			nbytes, dentries_len);
 		return -1;
+	}
 
 	return 0;
 }
@@ -320,7 +357,7 @@ static inline unsigned int sector_size_bits(unsigned int size)
 static int exfat_get_blk_dev_info(struct exfat_user_input *ui, struct exfat_blk_dev *bd)
 {
 	int fd, ret = -1;
-	unsigned long long blk_dev_size;
+	long long blk_dev_size;
 
 	fd = open(ui->dev_name, O_RDWR);
 	if (fd < 0)
@@ -328,16 +365,26 @@ static int exfat_get_blk_dev_info(struct exfat_user_input *ui, struct exfat_blk_
 
 	blk_dev_size = lseek(fd, 0, SEEK_END);
 	if (blk_dev_size <= 0) {
-		perror("exfat-tools\n");
+		exfat_msg(EXFAT_ERROR, "invalid block device size(%s) : %lld\n",
+			ui->dev_name, blk_dev_size);
+		ret = blk_dev_size;
+		close(fd);
 		goto out;
 	}
 
+	bd->dev_fd = fd;
 	bd->size = blk_dev_size;
 	if (ioctl(fd, BLKSSZGET, &bd->sector_size) < 0)
 		bd->sector_size = DEFAULT_SECTOR_SIZE;
 	bd->sector_size_bits = sector_size_bits(bd->sector_size);
 	bd->num_sectors = blk_dev_size / DEFAULT_SECTOR_SIZE;
 	bd->num_clusters = blk_dev_size / ui->cluster_size;
+
+	exfat_msg(EXFAT_DEBUG, "Block device name : %s\n", ui->dev_name);
+	exfat_msg(EXFAT_DEBUG, "Block device size : %lld\n", bd->size);
+	exfat_msg(EXFAT_DEBUG, "Block sector size : %u\n", bd->sector_size);
+	exfat_msg(EXFAT_DEBUG, "Number of the sectors : %u\n", bd->num_sectors);
+	exfat_msg(EXFAT_DEBUG, "Number of the clusters : %u\n", bd->num_clusters);
 
 	ret = 0;
 	bd->dev_fd = fd;
