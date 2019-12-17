@@ -339,7 +339,6 @@ out:
 
 static void usage(void)
 {       
-	fprintf(stderr, "exfat-tools version : %s\n", EXFAT_TOOLS_VERSION);
 	fprintf(stderr, "Usage: mkfs.exfat\n");
 
 	fprintf(stderr, "\t-v | --verbose\n");
@@ -347,15 +346,21 @@ static void usage(void)
 	exit(EXIT_FAILURE);
 }
 
+static void show_version(void)
+{
+	printf("exfat-tools version : %s\n", EXFAT_TOOLS_VERSION);
+	exit(EXIT_FAILURE);
+}
+
 static int verify_user_input(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
-	if (!ui.ui.cluster_size) {
+	if (!ui->cluster_size) {
 		/*
 		 * Default cluster size, Need to adjust default cluster size
 		 * according to device size
 		 */
-		ui.cluster_size = 128 * 1024;
+		ui->cluster_size = 128 * 1024;
 	}
 
 	ui->sec_per_clu = ui->cluster_size / bd->sector_size;
@@ -402,6 +407,9 @@ int main(int argc, char *argv[])
 						ui.cluster_size, MAX_CLUSTER_SIZE);
 				goto out;
 			}
+			break;
+		case 'V':
+			show_version();
 			break;
                 case 'v':
 			print_level = EXFAT_DEBUG;
