@@ -31,7 +31,6 @@ AC_CONFIG_FILES([
 	lib/Makefile
 	mkfs/Makefile
 	fsck/Makefile
-	dump/Makefile
 ])
 
 AC_OUTPUT
