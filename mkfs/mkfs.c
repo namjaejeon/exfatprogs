@@ -94,7 +94,8 @@ static int exfat_write_sector(struct exfat_blk_dev *bd, void *buf, unsigned int 
 }
 
 static int exfat_write_boot_sectors(struct exfat_blk_dev *bd,
-		struct exfat_user_input *ui, unsigned int *checksum)
+		struct exfat_user_input *ui, unsigned int *checksum,
+		unsigned sec_idx)
 {
 	struct pbr *ppbr;
 	int ret;
@@ -109,18 +110,10 @@ static int exfat_write_boot_sectors(struct exfat_blk_dev *bd,
 	exfat_setup_boot_sector(ppbr, bd, ui);
 
 	/* write main boot sector */
-	ret = exfat_write_sector(bd, ppbr, 0);
+	ret = exfat_write_sector(bd, ppbr, sec_idx);
 	if (ret < 0) {
 		exfat_msg(EXFAT_ERROR,
 			"main boot sector write failed\n");
-		goto free_ppbr;
-	}
-
-	/* write backup boot sector */
-	ret = exfat_write_sector(bd, ppbr, 1);
-	if (ret < 0) {
-		exfat_msg(EXFAT_ERROR,
-			"main backup sector write failed\n");
 		goto free_ppbr;
 	}
 
@@ -132,13 +125,13 @@ free_ppbr:
 }
 
 static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
-		unsigned int *checksum)
+		unsigned int *checksum, unsigned int sec_idx)
 {
-	int sec_idx;
 	struct expbr ep;
+	int exboot_sec_num = sec_idx + EXBOOT_SEC_NUM;
 
-	memset(&ep, 0, EXBOOT_SEC8_NUM * bd->sector_size);
-	for (sec_idx = EXBOOT_SEC_NUM; sec_idx <= EXBOOT_SEC8_NUM; sec_idx++) {
+	memset(&ep, 0, EXBOOT_SEC_NUM * bd->sector_size);
+	for (; sec_idx <= exboot_sec_num; sec_idx++) {
 		int ret;
 
 		ep.eb[sec_idx - 1].signature = cpu_to_le16(0xAA55);
@@ -155,7 +148,7 @@ static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
 }
 
 static int exfat_write_oem_sector(struct exfat_blk_dev *bd,
-		unsigned int *checksum)
+		unsigned int *checksum, unsigned int sec_idx)
 {
 	char *oem;
 
@@ -164,7 +157,7 @@ static int exfat_write_oem_sector(struct exfat_blk_dev *bd,
 		return -1;
 
 	memset(oem, 0xFF, bd->sector_size);
-	if (exfat_write_sector(bd, oem, OEM_SEC_NUM)) {
+	if (exfat_write_sector(bd, oem, sec_idx)) {
 		exfat_msg(EXFAT_ERROR,
 			"oem sector write failed\n");
 		return -1;
@@ -174,7 +167,7 @@ static int exfat_write_oem_sector(struct exfat_blk_dev *bd,
 }
 
 static int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
-		unsigned int checksum)
+		unsigned int checksum, unsigned int sec_idx)
 {
 	int *checksum_buf;
 
@@ -183,7 +176,7 @@ static int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
 		return -1;
 
 	memset(checksum_buf, checksum, bd->sector_size / sizeof(int));
-	if (exfat_write_sector(bd, checksum_buf, OEM_SEC_NUM)) {
+	if (exfat_write_sector(bd, checksum_buf, sec_idx)) {
 		exfat_msg(EXFAT_ERROR,
 			"checksum sector write failed\n");
 		return -1;
@@ -191,24 +184,26 @@ static int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
 }
 
 static int exfat_create_volume_boot_record(struct exfat_blk_dev *bd,
-		struct exfat_user_input *ui)
+		struct exfat_user_input *ui, unsigned int sec_idx)
 {
 	int ret;
 	unsigned int checksum;
 
-	ret = exfat_write_boot_sectors(bd, ui, &checksum);
+	ret = exfat_write_boot_sectors(bd, ui, &checksum, sec_idx);
 	if (ret)
 		return ret;
 
-	ret = exfat_write_extended_boot_sectors(bd, &checksum);
+	ret = exfat_write_extended_boot_sectors(bd, &checksum, ++sec_idx);
 	if (ret)
 		return ret;
 
-	ret = exfat_write_oem_sector(bd, &checksum);
+	sec_idx += EXBOOT_SEC_NUM;
+
+	ret = exfat_write_oem_sector(bd, &checksum, sec_idx);
 	if (ret)
 		return ret;
 
-	ret = exfat_write_checksum_sector(bd, checksum);
+	ret = exfat_write_checksum_sector(bd, checksum, ++sec_idx);
 	return ret;
 }
 
@@ -515,7 +510,12 @@ int main(int argc, char *argv[])
 
 	exfat_build_mkfs_info(&bd, &ui);
 
-	ret = exfat_create_volume_boot_record(&bd, &ui);
+	ret = exfat_create_volume_boot_record(&bd, &ui, 0);
+	if (ret)
+		goto out;
+
+	/* backup boot record */
+	ret = exfat_create_volume_boot_record(&bd, &ui, 13);
 	if (ret)
 		goto out;
 

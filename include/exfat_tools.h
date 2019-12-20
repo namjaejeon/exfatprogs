@@ -14,14 +14,7 @@
 /* Upcase tabel macro */
 #define EXFAT_UPCASE_TABLE_SIZE		(5836)
 
-enum {
-	BOOT_SEC_NUM = 0,
-	EXBOOT_SEC_NUM,
-	EXBOOT_SEC8_NUM = 8,
-	OEM_SEC_NUM,
-	RESERVED_SEC_NUM,
-	CHECKSUM_NUM,
-};
+#define EXBOOT_SEC_NUM	(8)
 
 struct exfat_blk_dev {
 	int dev_fd;
