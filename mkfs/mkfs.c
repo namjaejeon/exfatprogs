@@ -134,25 +134,23 @@ free_ppbr:
 static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
 		unsigned int *checksum, bool is_backup)
 {
-	struct expbr ep;
+	struct exbs eb;
+	int i;
 	unsigned int sec_idx = EXBOOT_SEC_IDX; 
-	int exboot_sec_num = sec_idx + EXBOOT_SEC_NUM;
 
-	if (is_backup) {
+	if (is_backup)
 	       sec_idx += BACKUP_BOOT_SEC_IDX;
-	       exboot_sec_num += BACKUP_BOOT_SEC_IDX;
-	}
 
-	memset(&ep, 0, EXBOOT_SEC_NUM * bd->sector_size);
-	for (; sec_idx <= exboot_sec_num; sec_idx++) {
-		ep.eb[sec_idx - 1].signature = cpu_to_le16(0xAA55);
-		if (exfat_write_sector(bd, &ep, sec_idx)) {
+	memset(&eb, 0, sizeof(struct exbs));
+	eb.signature = cpu_to_le16(0xAA55);
+	for (i = 0; i < EXBOOT_SEC_NUM; i++) {
+		if (exfat_write_sector(bd, &eb, sec_idx++)) {
 			exfat_msg(EXFAT_ERROR,
 				"extended boot sector write failed\n");
 			return -1;
 		}
 
-		calc_checksum((char *) &ep, sizeof(struct expbr), false, checksum);
+		calc_checksum((char *) &eb, sizeof(struct exbs), false, checksum);
 	}
 
 out:
@@ -352,7 +350,7 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 	int dentries_len = sizeof(struct exfat_dentry) * 3;
 	int nbytes;
 
-	exfat_msg(EXFAT_DEBUG, "Create Root Directory entry : %u\n");
+	exfat_msg(EXFAT_DEBUG, "Create Root Directory entry\n");
 
 	/* Set volume label entry */
 	ed[0].type = EXFAT_VOLUME;
