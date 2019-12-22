@@ -218,6 +218,8 @@ static int exfat_create_volume_boot_record(struct exfat_blk_dev *bd,
 {
 	unsigned int checksum = 0, sec_idx = 0;
 	int ret;
+	
+	exfat_msg(EXFAT_DEBUG, "Create Volume Boot Record\n");
 
 	ret = exfat_write_boot_sector(bd, ui, &checksum, is_backup);
 	if (ret)
@@ -253,6 +255,8 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
 	int ret, clu, count;
+
+	exfat_msg(EXFAT_DEBUG, "Create FAT Table\n");
 
 	/* fat entry 0 should be media type field(0xF8) */
 	ret = write_fat_entry(bd->dev_fd, 0xfffffff8, 0);
@@ -320,6 +324,8 @@ static int exfat_create_bitmap(struct exfat_blk_dev *bd,
 	char *bitmap;
 	int i, nbytes;
 
+	exfat_msg(EXFAT_DEBUG, "Create Allocation Bitmap\n");
+
 	bitmap = malloc(finfo.bitmap_byte_len);
 	if (!bitmap)
 		return -1;
@@ -345,6 +351,8 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 	struct exfat_dentry ed[3];
 	int dentries_len = sizeof(struct exfat_dentry) * 3;
 	int nbytes;
+
+	exfat_msg(EXFAT_DEBUG, "Create Root Directory entry : %u\n");
 
 	/* Set volume label entry */
 	ed[0].type = EXFAT_VOLUME;
