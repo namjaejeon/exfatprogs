@@ -304,8 +304,8 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 		if (ret) {
 			exfat_msg(EXFAT_ERROR,
 				"root entry write failed, clu : %d\n", clu);
-		}
 			return ret;
+		}
 	}
 
 	finfo.used_clu_cnt = count;
@@ -329,11 +329,12 @@ static int exfat_create_bitmap(struct exfat_blk_dev *bd,
 
 	lseek(bd->dev_fd, finfo.bitmap_byte_off, SEEK_SET);
 	nbytes = write(bd->dev_fd, bitmap, finfo.bitmap_byte_len);
-	if (nbytes != finfo.bitmap_byte_len)
+	if (nbytes != finfo.bitmap_byte_len) {
 		exfat_msg(EXFAT_ERROR,
 			"write failed, nbytes : %d, bitmap_len : %d\n",
 			nbytes, finfo.bitmap_byte_len);
 		return -1;
+	}
 
 	return 0;
 }
