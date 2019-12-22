@@ -221,13 +221,13 @@ static int exfat_create_volume_boot_record(struct exfat_blk_dev *bd,
 
 	ret = exfat_write_boot_sector(bd, ui, &checksum, is_backup);
 	if (ret)
-		return -1;
+		return ret;
 	ret = exfat_write_extended_boot_sectors(bd, &checksum, is_backup);
 	if (ret)
-		return -1;
+		return ret;
 	ret = exfat_write_oem_sector(bd, &checksum, is_backup);
 	if (ret)
-		return -1;
+		return ret;
 
 	return exfat_write_checksum_sector(bd, checksum, is_backup);
 }
@@ -245,6 +245,8 @@ static int write_fat_entry(int fd, unsigned int entry,
 			offset, entry);
 		return -1;
 	}
+
+	return 0;
 }
 
 static int exfat_create_fat_table(struct exfat_blk_dev *bd,
