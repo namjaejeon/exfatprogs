@@ -19,6 +19,8 @@
 #include "exfat_tools.h"
 #include "mkfs.h"
 
+struct exfat_mkfs_info finfo;
+
 static void calc_checksum(char *sector, unsigned short size,
 		bool is_boot_sec, unsigned int *checksum)
 {
@@ -67,6 +69,15 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 
 	memset(ppbr->boot_code, 0, 390); 
 	ppbr->signature = cpu_to_le16(PBR_SIGNATURE);
+
+	exfat_msg(EXFAT_DEBUG, "Volume Length(sectors) : %llu\n", cpu_to_le64(pbsx->vol_length));
+	exfat_msg(EXFAT_DEBUG, "FAT Offset(sector offset) : %u\n", cpu_to_le64(pbsx->fat_offset));
+	exfat_msg(EXFAT_DEBUG, "FAT Length(sectors) : %u\n", cpu_to_le32(pbsx->fat_length));
+	exfat_msg(EXFAT_DEBUG, "Cluster Heap Offset (sector offset) : %u\n", cpu_to_le32(pbsx->clu_offset));
+	exfat_msg(EXFAT_DEBUG, "Cluster Count (sectors) : %u\n", cpu_to_le32(pbsx->clu_count));
+	exfat_msg(EXFAT_DEBUG, "Root Cluster (cluster offset) : %u\n", cpu_to_le32(pbsx->root_cluster));
+	exfat_msg(EXFAT_DEBUG, "Sector Size Bits : %u\n", cpu_to_le32(pbsx->sect_size_bits));
+	exfat_msg(EXFAT_DEBUG, "Sector per Cluster bits : %u\n", cpu_to_le32(pbsx->sect_per_clus_bits));
 }
 
 static int exfat_write_sector(struct exfat_blk_dev *bd, void *buf, unsigned int sec_off)
@@ -84,11 +95,16 @@ static int exfat_write_sector(struct exfat_blk_dev *bd, void *buf, unsigned int 
 	return 0;
 }
 
-static int exfat_write_boot_sectors(struct exfat_blk_dev *bd,
-		struct exfat_user_input *ui, unsigned int *checksum)
+static int exfat_write_boot_sector(struct exfat_blk_dev *bd,
+		struct exfat_user_input *ui, unsigned int *checksum,
+		bool is_backup)
 {
 	struct pbr *ppbr;
-	int ret;
+	unsigned int sec_idx = BOOT_SEC_IDX;
+	int ret = 0;
+
+	if (is_backup)
+		sec_idx += BACKUP_BOOT_SEC_IDX;
 
 	ppbr = malloc(sizeof(struct pbr));
 	if (!ppbr) {
@@ -100,18 +116,11 @@ static int exfat_write_boot_sectors(struct exfat_blk_dev *bd,
 	exfat_setup_boot_sector(ppbr, bd, ui);
 
 	/* write main boot sector */
-	ret = exfat_write_sector(bd, ppbr, 0);
+	ret = exfat_write_sector(bd, ppbr, sec_idx);
 	if (ret < 0) {
 		exfat_msg(EXFAT_ERROR,
 			"main boot sector write failed\n");
-		goto free_ppbr;
-	}
-
-	/* write backup boot sector */
-	ret = exfat_write_sector(bd, ppbr, 1);
-	if (ret < 0) {
-		exfat_msg(EXFAT_ERROR,
-			"main backup sector write failed\n");
+		ret = -1;
 		goto free_ppbr;
 	}
 
@@ -119,19 +128,23 @@ static int exfat_write_boot_sectors(struct exfat_blk_dev *bd,
 
 free_ppbr:
 	free(ppbr);
-	return 0;
+	return ret;
 }
 
 static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
-		unsigned int *checksum)
+		unsigned int *checksum, bool is_backup)
 {
-	int sec_idx;
 	struct expbr ep;
+	unsigned int sec_idx = EXBOOT_SEC_IDX; 
+	int exboot_sec_num = sec_idx + EXBOOT_SEC_NUM;
 
-	memset(&ep, 0, EXBOOT_SEC8_NUM * bd->sector_size);
-	for (sec_idx = EXBOOT_SEC_NUM; sec_idx <= EXBOOT_SEC8_NUM; sec_idx++) {
-		int ret;
+	if (is_backup) {
+	       sec_idx += BACKUP_BOOT_SEC_IDX;
+	       exboot_sec_num += BACKUP_BOOT_SEC_IDX;
+	}
 
+	memset(&ep, 0, EXBOOT_SEC_NUM * bd->sector_size);
+	for (; sec_idx <= exboot_sec_num; sec_idx++) {
 		ep.eb[sec_idx - 1].signature = cpu_to_le16(0xAA55);
 		if (exfat_write_sector(bd, &ep, sec_idx)) {
 			exfat_msg(EXFAT_ERROR,
@@ -142,65 +155,81 @@ static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
 		calc_checksum((char *) &ep, sizeof(struct expbr), false, checksum);
 	}
 
+out:
 	return 0;
 }
 
 static int exfat_write_oem_sector(struct exfat_blk_dev *bd,
-		unsigned int *checksum)
+		unsigned int *checksum, bool is_backup)
 {
 	char *oem;
+	int ret = 0;
+	unsigned int sec_idx = OEM_SEC_IDX; 
 
 	oem = malloc(bd->sector_size);
-	if (oem)
+	if (!oem)
 		return -1;
 
+	if (is_backup)
+		sec_idx += BACKUP_BOOT_SEC_IDX;
+
 	memset(oem, 0xFF, bd->sector_size);
-	if (exfat_write_sector(bd, oem, OEM_SEC_NUM)) {
-		exfat_msg(EXFAT_ERROR,
-			"oem sector write failed\n");
-		return -1;
+	ret = exfat_write_sector(bd, oem, sec_idx);
+	if (ret) {
+		exfat_msg(EXFAT_ERROR, "oem sector write failed\n");
+		ret = -1;
+		goto free_oem; 
 	}
 
 	calc_checksum((char *)oem, bd->sector_size, false, checksum);
+
+free_oem:
+	free(oem);
+	return ret;
 }
 
 static int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
-		unsigned int checksum)
+		unsigned int checksum, bool is_backup)
 {
-	int *checksum_buf;
+	char *checksum_buf, ret = 0;
+	unsigned int sec_idx = CHECKSUM_SEC_IDX; 
 
 	checksum_buf = malloc(bd->sector_size);
-	if (checksum_buf)
+	if (!checksum_buf)
 		return -1;
 
+	if (is_backup)
+		sec_idx += BACKUP_BOOT_SEC_IDX;
+
 	memset(checksum_buf, checksum, bd->sector_size / sizeof(int));
-	if (exfat_write_sector(bd, checksum_buf, OEM_SEC_NUM)) {
-		exfat_msg(EXFAT_ERROR,
-			"checksum sector write failed\n");
-		return -1;
+	ret = exfat_write_sector(bd, checksum_buf, sec_idx);
+	if (ret) {
+		exfat_msg(EXFAT_ERROR, "checksum sector write failed\n");
+		goto free;
 	}
+
+free:
+	free(checksum_buf);
+	return ret;
 }
 
 static int exfat_create_volume_boot_record(struct exfat_blk_dev *bd,
-		struct exfat_user_input *ui)
+		struct exfat_user_input *ui, bool is_backup)
 {
+	unsigned int checksum = 0, sec_idx = 0;
 	int ret;
-	unsigned int checksum;
 
-	ret = exfat_write_boot_sectors(bd, ui, &checksum);
+	ret = exfat_write_boot_sector(bd, ui, &checksum, is_backup);
 	if (ret)
-		return ret;
-
-	ret = exfat_write_extended_boot_sectors(bd, &checksum);
+		return -1;
+	ret = exfat_write_extended_boot_sectors(bd, &checksum, is_backup);
 	if (ret)
-		return ret;
-
-	ret = exfat_write_oem_sector(bd, &checksum);
+		return -1;
+	ret = exfat_write_oem_sector(bd, &checksum, is_backup);
 	if (ret)
-		return ret;
+		return -1;
 
-	ret = exfat_write_checksum_sector(bd, checksum);
-	return ret;
+	return exfat_write_checksum_sector(bd, checksum, is_backup);
 }
 
 static int write_fat_entry(int fd, unsigned int entry,
@@ -506,7 +535,12 @@ int main(int argc, char *argv[])
 
 	exfat_build_mkfs_info(&bd, &ui);
 
-	ret = exfat_create_volume_boot_record(&bd, &ui);
+	ret = exfat_create_volume_boot_record(&bd, &ui, 0);
+	if (ret)
+		goto out;
+
+	/* backup sector */
+	ret = exfat_create_volume_boot_record(&bd, &ui, 1);
 	if (ret)
 		goto out;
 

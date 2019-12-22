@@ -15,12 +15,13 @@
 #define EXFAT_UPCASE_TABLE_SIZE		(5836)
 
 enum {
-	BOOT_SEC_NUM = 0,
-	EXBOOT_SEC_NUM,
-	EXBOOT_SEC8_NUM = 8,
-	OEM_SEC_NUM,
-	RESERVED_SEC_NUM,
-	CHECKSUM_NUM,
+	BOOT_SEC_IDX = 0,
+	EXBOOT_SEC_IDX,
+	EXBOOT_SEC_NUM = 8,
+	OEM_SEC_IDX,
+	RESERVED_SEC_IDX,
+	CHECKSUM_SEC_IDX,
+	BACKUP_BOOT_SEC_IDX,
 };
 
 struct exfat_blk_dev {
@@ -48,7 +49,7 @@ void exfat_clear_bit(struct exfat_blk_dev *bd, char *bitmap,
  * Exfat Print
  */
 
-unsigned int print_level;
+static unsigned int print_level;
 
 #define EXFAT_ERROR	(0)
 #define EXFAT_DEBUG	(1)
