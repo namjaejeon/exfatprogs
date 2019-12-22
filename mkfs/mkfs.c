@@ -432,10 +432,11 @@ out:
 static void usage(void)
 {       
 	fprintf(stderr, "Usage: mkfs.exfat\n");
-	fprintf(stderr, "\t-c | --cluster-size\n");
-	fprintf(stderr, "\t-V | --version\n");
-	fprintf(stderr, "\t-v | --verbose\n");
-	fprintf(stderr, "\t-h | --help\n");
+	fprintf(stderr, "\t-c=size | --cluster-size=size  Set cluster size\n");
+	fprintf(stderr, "\t-f | --full-format		  Full Format\n");
+	fprintf(stderr, "\t-V | --version		  Show version\n");
+	fprintf(stderr, "\t-v | --verbose		  Print debug\n");
+	fprintf(stderr, "\t-h | --help			  Show help\n");
 
 	exit(EXIT_FAILURE);
 }
@@ -462,6 +463,7 @@ static void init_user_input(struct exfat_user_input *ui)
 	 * according to device size
 	 */
 	ui->cluster_size = 128 * 1024;
+	ui->quick = true;
 }
 
 static int verify_user_input(struct exfat_blk_dev *bd,
@@ -493,6 +495,11 @@ static void exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	finfo.root_byte_len = sizeof(struct exfat_dentry) * 3;
 }
 
+static int exfat_zero_out_disk(struct exfat_blk_dev *bd)
+{
+	return 0;	
+}
+
 int main(int argc, char *argv[])
 {
 	int c;
@@ -504,7 +511,7 @@ int main(int argc, char *argv[])
 	init_user_input(&ui);
 
         opterr = 0;
-        while ((c = getopt_long(argc, argv, "c:Vvh", opts, NULL)) != EOF)
+        while ((c = getopt_long(argc, argv, "c:f:Vvh", opts, NULL)) != EOF)
                 switch (c) {
                 case 'c':
 			ui.cluster_size = atoi(optarg);
@@ -514,6 +521,9 @@ int main(int argc, char *argv[])
 					ui.cluster_size, MAX_CLUSTER_SIZE);
 				goto out;
 			}
+			break;
+                case 'f':
+			ui.quick = false;
 			break;
 		case 'V':
 			show_version();
@@ -540,6 +550,12 @@ int main(int argc, char *argv[])
 	ret = verify_user_input(&bd, &ui);
 	if (ret < 0)
 		goto out;
+
+	if (ui.quick == false) {
+		ret = exfat_zero_out_disk(&bd);
+		if (ret)
+			goto out;
+	}
 
 	exfat_build_mkfs_info(&bd, &ui);
 
