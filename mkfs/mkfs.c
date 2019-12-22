@@ -252,8 +252,7 @@ static int write_fat_entry(int fd, unsigned int entry,
 static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
-	int ret, clu, clu_cnt, bitmap_clu_cnt, ut_cnt, root_cnt;
-	int count;
+	int ret, clu, count;
 
 	/* fat entry 0 should be media type field(0xF8) */
 	ret = write_fat_entry(bd->dev_fd, 0xfffffff8, 0);
@@ -298,7 +297,7 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 	}
 
 	/* write root directory entries */
-	count += finfo.root_byte_len / ui->cluster_size;
+	count += round_up(finfo.root_byte_len, ui->cluster_size) / ui->cluster_size;
 	finfo.root_start_clu = clu;
 	for (; clu < count; clu++) {
 		ret = write_fat_entry(bd->dev_fd, clu, clu);
