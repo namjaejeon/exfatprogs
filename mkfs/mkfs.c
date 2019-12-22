@@ -19,6 +19,8 @@
 #include "exfat_tools.h"
 #include "mkfs.h"
 
+struct exfat_mkfs_info finfo;
+
 static void calc_checksum(char *sector, unsigned short size,
 		bool is_boot_sec, unsigned int *checksum)
 {
@@ -321,8 +323,8 @@ static int exfat_create_bitmap(struct exfat_blk_dev *bd,
 	if (!bitmap)
 		return -1;
 
-//	for (i = 0; i < finfo.used_clu_cnt; i++)
-//		exfat_set_bit(bd, bitmap, i);
+	for (i = 0; i < finfo.used_clu_cnt; i++)
+		exfat_set_bit(bd, bitmap, i);
 
 	lseek(bd->dev_fd, finfo.bitmap_byte_off, SEEK_SET);
 	nbytes = write(bd->dev_fd, bitmap, finfo.bitmap_byte_len);

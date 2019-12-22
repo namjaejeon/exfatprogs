@@ -27,7 +27,7 @@ struct exfat_mkfs_info {
 	int root_start_clu;
 };
 
-struct exfat_mkfs_info finfo;
+extern struct exfat_mkfs_info finfo;
 
 int exfat_create_upcase_table(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui);

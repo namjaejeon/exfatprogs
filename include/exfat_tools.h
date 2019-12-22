@@ -49,7 +49,7 @@ void exfat_clear_bit(struct exfat_blk_dev *bd, char *bitmap,
  * Exfat Print
  */
 
-unsigned int print_level;
+static unsigned int print_level;
 
 #define EXFAT_ERROR	(0)
 #define EXFAT_DEBUG	(1)
