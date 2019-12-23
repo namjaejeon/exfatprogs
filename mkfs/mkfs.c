@@ -21,7 +21,7 @@
 
 struct exfat_mkfs_info finfo;
 
-static void calc_checksum(char *sector, unsigned short size,
+static void boot_calc_checksum(unsigned char *sector, unsigned short size,
 		bool is_boot_sec, unsigned int *checksum)
 {
 	unsigned int index;
@@ -32,7 +32,7 @@ static void calc_checksum(char *sector, unsigned short size,
 		    ((index == 106) || (index == 107) || (index == 112)))
 			continue;
 		*checksum = ((*checksum & 1) ? 0x80000000 : 0) +
-			(*checksum >> 1) + (unsigned int)sector[index];
+			(*checksum >> 1) + sector[index];
 	}
 }
 
@@ -124,7 +124,7 @@ static int exfat_write_boot_sector(struct exfat_blk_dev *bd,
 		goto free_ppbr;
 	}
 
-	calc_checksum((char *)ppbr, sizeof(struct pbr), true, checksum);
+	boot_calc_checksum((unsigned char *)ppbr, sizeof(struct pbr), true, checksum);
 
 free_ppbr:
 	free(ppbr);
@@ -150,7 +150,7 @@ static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
 			return -1;
 		}
 
-		calc_checksum((char *) &eb, sizeof(struct exbs), false, checksum);
+		boot_calc_checksum((unsigned char *) &eb, sizeof(struct exbs), false, checksum);
 	}
 
 out:
@@ -179,7 +179,7 @@ static int exfat_write_oem_sector(struct exfat_blk_dev *bd,
 		goto free_oem; 
 	}
 	
-	calc_checksum((char *)oem, bd->sector_size, false, checksum);
+	boot_calc_checksum((unsigned char *)oem, bd->sector_size, false, checksum);
 
 	/* Zero out reserved sector */
 	memset(oem, 0, bd->sector_size);
@@ -190,7 +190,7 @@ static int exfat_write_oem_sector(struct exfat_blk_dev *bd,
 		goto free_oem; 
 	}
 
-	calc_checksum((char *)oem, bd->sector_size, false, checksum);
+	boot_calc_checksum((unsigned char *)oem, bd->sector_size, false, checksum);
 
 free_oem:
 	free(oem);
