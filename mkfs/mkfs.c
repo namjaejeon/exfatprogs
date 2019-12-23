@@ -56,7 +56,7 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	pbsx->fat_length = cpu_to_le32(finfo.fat_byte_len / bd->sector_size);
 	pbsx->clu_offset = cpu_to_le32(finfo.clu_byte_off / bd->sector_size);
 	pbsx->clu_count = cpu_to_le32(finfo.total_clu_cnt);
-	pbsx->root_cluster = cpu_to_le32(finfo.root_byte_off / ui->cluster_size);
+	pbsx->root_cluster = cpu_to_le32(finfo.root_start_clu);
 	pbsx->vol_serial = 1234;
 	pbsx->vol_flags = 0;
 	pbsx->sect_size_bits = bd->sector_size_bits;
@@ -258,7 +258,7 @@ static int write_fat_entris(struct exfat_user_input *ui, int fd,
 	count = clu + round_up(finfo.bitmap_byte_len, ui->cluster_size) /
 		ui->cluster_size;
 
-	for (; clu < count; clu++) {
+	for (; clu < count - 1; clu++) {
 		ret = write_fat_entry(fd, clu + 1, clu);
 		if (ret)
 			return ret;
@@ -301,17 +301,16 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 		return ret;
 
 	/* write upcase table entries */
-	clu = write_fat_entris(ui, bd->dev_fd, clu, finfo.ut_byte_len);
+	clu = write_fat_entris(ui, bd->dev_fd, clu + 1, finfo.ut_byte_len);
 	if (clu < 0)
 		return ret;
-
 
 	/* write root directory entries */
-	clu = write_fat_entris(ui, bd->dev_fd, clu, finfo.root_byte_len);
+	clu = write_fat_entris(ui, bd->dev_fd, clu + 1, finfo.root_byte_len);
 	if (clu < 0)
 		return ret;
 
-	finfo.used_clu_cnt = clu;
+	finfo.used_clu_cnt = clu + 1;
 	exfat_msg(EXFAT_DEBUG, "Total used cluster count : %d\n", finfo.used_clu_cnt);
 
 	return ret;
@@ -486,13 +485,13 @@ static void exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	finfo.clu_byte_off = round_up(finfo.fat_byte_off + finfo.fat_byte_len,
 		DEFAULT_CLUSTER_SIZE);
 	finfo.total_clu_cnt = (bd->size - finfo.clu_byte_off) / ui->cluster_size;
-	finfo.bitmap_byte_off = EXFAT_REVERVED_CLUSTERS * ui->cluster_size;
+	finfo.bitmap_byte_off = finfo.clu_byte_off;
 	finfo.bitmap_byte_len = round_up(finfo.total_clu_cnt, 8) / 8;
+	finfo.ut_start_clu = round_up(EXFAT_REVERVED_CLUSTERS * ui->cluster_size + finfo.bitmap_byte_len, ui->cluster_size) / ui->cluster_size;  
 	finfo.ut_byte_off = round_up(finfo.bitmap_byte_off + finfo.bitmap_byte_len, ui->cluster_size);
-	finfo.ut_start_clu = finfo.ut_byte_off / ui->cluster_size;
 	finfo.ut_byte_len = EXFAT_UPCASE_TABLE_SIZE;
+	finfo.root_start_clu = round_up(finfo.ut_start_clu * ui->cluster_size + finfo.ut_byte_len, ui->cluster_size) / ui->cluster_size;
 	finfo.root_byte_off = round_up(finfo.ut_byte_off + finfo.ut_byte_len, ui->cluster_size);
-	finfo.root_start_clu = finfo.root_byte_off / ui->cluster_size;
 	finfo.root_byte_len = sizeof(struct exfat_dentry) * 3;
 }
 
