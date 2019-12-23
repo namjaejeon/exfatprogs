@@ -40,6 +40,7 @@ struct exfat_user_input {
 	unsigned int cluster_size;
 	unsigned int sec_per_clu;
 	bool quick;
+	char volume_label[22];
 };
 
 void exfat_set_bit(struct exfat_blk_dev *bd, char *bitmap,

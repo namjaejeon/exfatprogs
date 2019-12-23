@@ -362,14 +362,17 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 {
 	struct exfat_dentry ed[3];
 	int dentries_len = sizeof(struct exfat_dentry) * 3;
-	int nbytes;
+	int nbytes, vol_len;
 
 	exfat_msg(EXFAT_DEBUG, "Create Root Directory entry\n");
 
 	/* Set volume label entry */
-	ed[0].type = EXFAT_VOLUME;
-	strcpy(ed[0].vol_label, "EXFAT");
-	ed[0].vol_char_cnt = strlen("EXFAT");
+	vol_len = strlen(ui->volume_label);
+	if (vol_len) {
+		ed[0].type = EXFAT_VOLUME;
+		strcpy(ed[0].vol_label, ui->volume_label);
+		ed[0].vol_char_cnt = strlen("EXFAT");
+	}
 
 	/* Set bitmap entry */
 	ed[1].type = EXFAT_BITMAP;
@@ -446,11 +449,12 @@ out:
 static void usage(void)
 {       
 	fprintf(stderr, "Usage: mkfs.exfat\n");
-	fprintf(stderr, "\t-c=size | --cluster-size=size  Set cluster size\n");
-	fprintf(stderr, "\t-f | --full-format		  Full Format\n");
-	fprintf(stderr, "\t-V | --version		  Show version\n");
-	fprintf(stderr, "\t-v | --verbose		  Print debug\n");
-	fprintf(stderr, "\t-h | --help			  Show help\n");
+	fprintf(stderr, "\t-l=string | --volume-label=string	Set volume label\n");
+	fprintf(stderr, "\t-c=size | --cluster-size=size	Set cluster size\n");
+	fprintf(stderr, "\t-f | --full-format			Full format\n");
+	fprintf(stderr, "\t-V | --version			Show version\n");
+	fprintf(stderr, "\t-v | --verbose		  	Print debug\n");
+	fprintf(stderr, "\t-h | --help			  	Show help\n");
 
 	exit(EXIT_FAILURE);
 }
@@ -462,7 +466,9 @@ static void show_version(void)
 }
 
 static struct option opts[] = {
+	{"volme-label",		required_argument,	NULL,	'l' },
 	{"cluster-size",	required_argument,	NULL,	'c' },
+	{"full-format",		no_argument,		NULL,	'f' },
 	{"version",		no_argument,		NULL,	'V' },
 	{"help",		no_argument,		NULL,	'h' },
 	{"?",			no_argument,		NULL,	'?' },
@@ -525,8 +531,10 @@ int main(int argc, char *argv[])
 	init_user_input(&ui);
 
         opterr = 0;
-        while ((c = getopt_long(argc, argv, "c:f:Vvh", opts, NULL)) != EOF)
+        while ((c = getopt_long(argc, argv, "l:c:f:Vvh", opts, NULL)) != EOF)
                 switch (c) {
+                case 'l':
+			break;
                 case 'c':
 			ui.cluster_size = atoi(optarg);
 			if (ui.cluster_size > MAX_CLUSTER_SIZE) {
