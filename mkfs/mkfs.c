@@ -134,25 +134,23 @@ free_ppbr:
 static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
 		unsigned int *checksum, bool is_backup)
 {
-	struct expbr ep;
+	struct exbs eb;
+	int i;
 	unsigned int sec_idx = EXBOOT_SEC_IDX; 
-	int exboot_sec_num = sec_idx + EXBOOT_SEC_NUM;
 
-	if (is_backup) {
+	if (is_backup)
 	       sec_idx += BACKUP_BOOT_SEC_IDX;
-	       exboot_sec_num += BACKUP_BOOT_SEC_IDX;
-	}
 
-	memset(&ep, 0, EXBOOT_SEC_NUM * bd->sector_size);
-	for (; sec_idx <= exboot_sec_num; sec_idx++) {
-		ep.eb[sec_idx - 1].signature = cpu_to_le16(0xAA55);
-		if (exfat_write_sector(bd, &ep, sec_idx)) {
+	memset(&eb, 0, sizeof(struct exbs));
+	eb.signature = cpu_to_le16(0xAA55);
+	for (i = 0; i < EXBOOT_SEC_NUM; i++) {
+		if (exfat_write_sector(bd, &eb, sec_idx++)) {
 			exfat_msg(EXFAT_ERROR,
 				"extended boot sector write failed\n");
 			return -1;
 		}
 
-		calc_checksum((char *) &ep, sizeof(struct expbr), false, checksum);
+		calc_checksum((char *) &eb, sizeof(struct exbs), false, checksum);
 	}
 
 out:
@@ -218,16 +216,18 @@ static int exfat_create_volume_boot_record(struct exfat_blk_dev *bd,
 {
 	unsigned int checksum = 0, sec_idx = 0;
 	int ret;
+	
+	exfat_msg(EXFAT_DEBUG, "Create Volume Boot Record\n");
 
 	ret = exfat_write_boot_sector(bd, ui, &checksum, is_backup);
 	if (ret)
-		return -1;
+		return ret;
 	ret = exfat_write_extended_boot_sectors(bd, &checksum, is_backup);
 	if (ret)
-		return -1;
+		return ret;
 	ret = exfat_write_oem_sector(bd, &checksum, is_backup);
 	if (ret)
-		return -1;
+		return ret;
 
 	return exfat_write_checksum_sector(bd, checksum, is_backup);
 }
@@ -245,13 +245,16 @@ static int write_fat_entry(int fd, unsigned int entry,
 			offset, entry);
 		return -1;
 	}
+
+	return 0;
 }
 
 static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
-	int ret, clu, clu_cnt, bitmap_clu_cnt, ut_cnt, root_cnt;
-	int count;
+	int ret, clu, count;
+
+	exfat_msg(EXFAT_DEBUG, "Create FAT Table\n");
 
 	/* fat entry 0 should be media type field(0xF8) */
 	ret = write_fat_entry(bd->dev_fd, 0xfffffff8, 0);
@@ -296,15 +299,15 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 	}
 
 	/* write root directory entries */
-	count += finfo.root_byte_len / ui->cluster_size;
+	count += round_up(finfo.root_byte_len, ui->cluster_size) / ui->cluster_size;
 	finfo.root_start_clu = clu;
 	for (; clu < count; clu++) {
 		ret = write_fat_entry(bd->dev_fd, clu, clu);
 		if (ret) {
 			exfat_msg(EXFAT_ERROR,
 				"root entry write failed, clu : %d\n", clu);
-		}
 			return ret;
+		}
 	}
 
 	finfo.used_clu_cnt = count;
@@ -319,6 +322,8 @@ static int exfat_create_bitmap(struct exfat_blk_dev *bd,
 	char *bitmap;
 	int i, nbytes;
 
+	exfat_msg(EXFAT_DEBUG, "Create Allocation Bitmap\n");
+
 	bitmap = malloc(finfo.bitmap_byte_len);
 	if (!bitmap)
 		return -1;
@@ -328,11 +333,12 @@ static int exfat_create_bitmap(struct exfat_blk_dev *bd,
 
 	lseek(bd->dev_fd, finfo.bitmap_byte_off, SEEK_SET);
 	nbytes = write(bd->dev_fd, bitmap, finfo.bitmap_byte_len);
-	if (nbytes != finfo.bitmap_byte_len)
+	if (nbytes != finfo.bitmap_byte_len) {
 		exfat_msg(EXFAT_ERROR,
 			"write failed, nbytes : %d, bitmap_len : %d\n",
 			nbytes, finfo.bitmap_byte_len);
 		return -1;
+	}
 
 	return 0;
 }
@@ -343,6 +349,8 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 	struct exfat_dentry ed[3];
 	int dentries_len = sizeof(struct exfat_dentry) * 3;
 	int nbytes;
+
+	exfat_msg(EXFAT_DEBUG, "Create Root Directory entry\n");
 
 	/* Set volume label entry */
 	ed[0].type = EXFAT_VOLUME;
@@ -424,10 +432,11 @@ out:
 static void usage(void)
 {       
 	fprintf(stderr, "Usage: mkfs.exfat\n");
-	fprintf(stderr, "\t-c | --cluster-size\n");
-	fprintf(stderr, "\t-V | --version\n");
-	fprintf(stderr, "\t-v | --verbose\n");
-	fprintf(stderr, "\t-h | --help\n");
+	fprintf(stderr, "\t-c=size | --cluster-size=size  Set cluster size\n");
+	fprintf(stderr, "\t-f | --full-format		  Full Format\n");
+	fprintf(stderr, "\t-V | --version		  Show version\n");
+	fprintf(stderr, "\t-v | --verbose		  Print debug\n");
+	fprintf(stderr, "\t-h | --help			  Show help\n");
 
 	exit(EXIT_FAILURE);
 }
@@ -454,6 +463,7 @@ static void init_user_input(struct exfat_user_input *ui)
 	 * according to device size
 	 */
 	ui->cluster_size = 128 * 1024;
+	ui->quick = true;
 }
 
 static int verify_user_input(struct exfat_blk_dev *bd,
@@ -485,6 +495,11 @@ static void exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	finfo.root_byte_len = sizeof(struct exfat_dentry) * 3;
 }
 
+static int exfat_zero_out_disk(struct exfat_blk_dev *bd)
+{
+	return 0;	
+}
+
 int main(int argc, char *argv[])
 {
 	int c;
@@ -496,7 +511,7 @@ int main(int argc, char *argv[])
 	init_user_input(&ui);
 
         opterr = 0;
-        while ((c = getopt_long(argc, argv, "c:Vvh", opts, NULL)) != EOF)
+        while ((c = getopt_long(argc, argv, "c:f:Vvh", opts, NULL)) != EOF)
                 switch (c) {
                 case 'c':
 			ui.cluster_size = atoi(optarg);
@@ -506,6 +521,9 @@ int main(int argc, char *argv[])
 					ui.cluster_size, MAX_CLUSTER_SIZE);
 				goto out;
 			}
+			break;
+                case 'f':
+			ui.quick = false;
 			break;
 		case 'V':
 			show_version();
@@ -532,6 +550,12 @@ int main(int argc, char *argv[])
 	ret = verify_user_input(&bd, &ui);
 	if (ret < 0)
 		goto out;
+
+	if (ui.quick == false) {
+		ret = exfat_zero_out_disk(&bd);
+		if (ret)
+			goto out;
+	}
 
 	exfat_build_mkfs_info(&bd, &ui);
 

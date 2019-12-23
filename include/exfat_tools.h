@@ -5,6 +5,8 @@
 
 #ifndef _EXFAT_TOOLS_H
 
+#include <stdbool.h>
+
 #define EXFAT_MIN_NUM_SEC_VOL		(2048)
 #define EXFAT_MAX_NUM_SEC_VOL		((2 << 64) - 1)
 
@@ -37,6 +39,7 @@ struct exfat_user_input {
 	char dev_name[255];
 	unsigned int cluster_size;
 	unsigned int sec_per_clu;
+	bool quick;
 };
 
 void exfat_set_bit(struct exfat_blk_dev *bd, char *bitmap,
