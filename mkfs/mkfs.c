@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <errno.h>
+#include <math.h>
 
 #include "exfat_ondisk.h"
 #include "exfat_tools.h"
@@ -21,7 +22,7 @@
 
 struct exfat_mkfs_info finfo;
 
-static void calc_checksum(char *sector, unsigned short size,
+static void boot_calc_checksum(unsigned char *sector, unsigned short size,
 		bool is_boot_sec, unsigned int *checksum)
 {
 	unsigned int index;
@@ -32,7 +33,7 @@ static void calc_checksum(char *sector, unsigned short size,
 		    ((index == 106) || (index == 107) || (index == 112)))
 			continue;
 		*checksum = ((*checksum & 1) ? 0x80000000 : 0) +
-			(*checksum >> 1) + (unsigned int)sector[index];
+			(*checksum >> 1) + sector[index];
 	}
 }
 
@@ -60,7 +61,7 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	pbsx->vol_serial = 1234;
 	pbsx->vol_flags = 0;
 	pbsx->sect_size_bits = bd->sector_size_bits;
-	pbsx->sect_per_clus_bits = ui->sec_per_clu / 32;
+	pbsx->sect_per_clus_bits = log2(ui->sec_per_clu);
 	pbsx->num_fats = 1;
 	/* fs_version[0] : minor and fs_version[1] : major */
 	pbsx->fs_version[0] = 0;
@@ -124,7 +125,7 @@ static int exfat_write_boot_sector(struct exfat_blk_dev *bd,
 		goto free_ppbr;
 	}
 
-	calc_checksum((char *)ppbr, sizeof(struct pbr), true, checksum);
+	boot_calc_checksum((unsigned char *)ppbr, sizeof(struct pbr), true, checksum);
 
 free_ppbr:
 	free(ppbr);
@@ -150,7 +151,7 @@ static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
 			return -1;
 		}
 
-		calc_checksum((char *) &eb, sizeof(struct exbs), false, checksum);
+		boot_calc_checksum((unsigned char *) &eb, sizeof(struct exbs), false, checksum);
 	}
 
 out:
@@ -179,7 +180,7 @@ static int exfat_write_oem_sector(struct exfat_blk_dev *bd,
 		goto free_oem; 
 	}
 	
-	calc_checksum((char *)oem, bd->sector_size, false, checksum);
+	boot_calc_checksum((unsigned char *)oem, bd->sector_size, false, checksum);
 
 	/* Zero out reserved sector */
 	memset(oem, 0, bd->sector_size);
@@ -190,7 +191,7 @@ static int exfat_write_oem_sector(struct exfat_blk_dev *bd,
 		goto free_oem; 
 	}
 
-	calc_checksum((char *)oem, bd->sector_size, false, checksum);
+	boot_calc_checksum((unsigned char *)oem, bd->sector_size, false, checksum);
 
 free_oem:
 	free(oem);
@@ -362,14 +363,17 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 {
 	struct exfat_dentry ed[3];
 	int dentries_len = sizeof(struct exfat_dentry) * 3;
-	int nbytes;
+	int nbytes, vol_len;
 
 	exfat_msg(EXFAT_DEBUG, "Create Root Directory entry\n");
 
 	/* Set volume label entry */
-	ed[0].type = EXFAT_VOLUME;
-	strcpy(ed[0].vol_label, "EXFAT");
-	ed[0].vol_char_cnt = strlen("EXFAT");
+	vol_len = strlen(ui->volume_label);
+	if (vol_len) {
+		ed[0].type = EXFAT_VOLUME;
+		strcpy(ed[0].vol_label, ui->volume_label);
+		ed[0].vol_char_cnt = strlen("EXFAT");
+	}
 
 	/* Set bitmap entry */
 	ed[1].type = EXFAT_BITMAP;
@@ -446,11 +450,12 @@ out:
 static void usage(void)
 {       
 	fprintf(stderr, "Usage: mkfs.exfat\n");
-	fprintf(stderr, "\t-c=size | --cluster-size=size  Set cluster size\n");
-	fprintf(stderr, "\t-f | --full-format		  Full Format\n");
-	fprintf(stderr, "\t-V | --version		  Show version\n");
-	fprintf(stderr, "\t-v | --verbose		  Print debug\n");
-	fprintf(stderr, "\t-h | --help			  Show help\n");
+	fprintf(stderr, "\t-l=string | --volume-label=string	Set volume label\n");
+	fprintf(stderr, "\t-c=size | --cluster-size=size	Set cluster size\n");
+	fprintf(stderr, "\t-f | --full-format			Full format\n");
+	fprintf(stderr, "\t-V | --version			Show version\n");
+	fprintf(stderr, "\t-v | --verbose		  	Print debug\n");
+	fprintf(stderr, "\t-h | --help			  	Show help\n");
 
 	exit(EXIT_FAILURE);
 }
@@ -462,7 +467,9 @@ static void show_version(void)
 }
 
 static struct option opts[] = {
+	{"volme-label",		required_argument,	NULL,	'l' },
 	{"cluster-size",	required_argument,	NULL,	'c' },
+	{"full-format",		no_argument,		NULL,	'f' },
 	{"version",		no_argument,		NULL,	'V' },
 	{"help",		no_argument,		NULL,	'h' },
 	{"?",			no_argument,		NULL,	'?' },
@@ -525,8 +532,10 @@ int main(int argc, char *argv[])
 	init_user_input(&ui);
 
         opterr = 0;
-        while ((c = getopt_long(argc, argv, "c:f:Vvh", opts, NULL)) != EOF)
+        while ((c = getopt_long(argc, argv, "l:c:f:Vvh", opts, NULL)) != EOF)
                 switch (c) {
+                case 'l':
+			break;
                 case 'c':
 			ui.cluster_size = atoi(optarg);
 			if (ui.cluster_size > MAX_CLUSTER_SIZE) {
