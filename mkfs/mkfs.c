@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <errno.h>
+#include <math.h>
 
 #include "exfat_ondisk.h"
 #include "exfat_tools.h"
@@ -60,7 +61,7 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	pbsx->vol_serial = 1234;
 	pbsx->vol_flags = 0;
 	pbsx->sect_size_bits = bd->sector_size_bits;
-	pbsx->sect_per_clus_bits = ui->sec_per_clu / 32;
+	pbsx->sect_per_clus_bits = log2(ui->sec_per_clu);
 	pbsx->num_fats = 1;
 	/* fs_version[0] : minor and fs_version[1] : major */
 	pbsx->fs_version[0] = 0;
