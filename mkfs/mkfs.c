@@ -142,7 +142,7 @@ static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
 	       sec_idx += BACKUP_BOOT_SEC_IDX;
 
 	memset(&eb, 0, sizeof(struct exbs));
-	eb.signature = cpu_to_le16(0xAA55);
+	eb.signature = cpu_to_le16(PBR_SIGNATURE);
 	for (i = 0; i < EXBOOT_SEC_NUM; i++) {
 		if (exfat_write_sector(bd, &eb, sec_idx++)) {
 			exfat_msg(EXFAT_ERROR,
@@ -178,6 +178,17 @@ static int exfat_write_oem_sector(struct exfat_blk_dev *bd,
 		ret = -1;
 		goto free_oem; 
 	}
+	
+	calc_checksum((char *)oem, bd->sector_size, false, checksum);
+
+	/* Zero out reserved sector */
+	memset(oem, 0, bd->sector_size);
+	ret = exfat_write_sector(bd, oem, sec_idx + 1);
+	if (ret) {
+		exfat_msg(EXFAT_ERROR, "reserved sector write failed\n");
+		ret = -1;
+		goto free_oem; 
+	}
 
 	calc_checksum((char *)oem, bd->sector_size, false, checksum);
 
@@ -189,7 +200,8 @@ free_oem:
 static int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
 		unsigned int checksum, bool is_backup)
 {
-	char *checksum_buf, ret = 0;
+	__le32 *checksum_buf;
+	int i, ret = 0;
 	unsigned int sec_idx = CHECKSUM_SEC_IDX; 
 
 	checksum_buf = malloc(bd->sector_size);
@@ -199,7 +211,9 @@ static int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
 	if (is_backup)
 		sec_idx += BACKUP_BOOT_SEC_IDX;
 
-	memset(checksum_buf, checksum, bd->sector_size / sizeof(int));
+	for (i = 0; i < bd->sector_size / sizeof(int); i++)
+		checksum_buf[i] = cpu_to_le32(checksum);
+
 	ret = exfat_write_sector(bd, checksum_buf, sec_idx);
 	if (ret) {
 		exfat_msg(EXFAT_ERROR, "checksum sector write failed\n");
@@ -214,7 +228,7 @@ free:
 static int exfat_create_volume_boot_record(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui, bool is_backup)
 {
-	unsigned int checksum = 0, sec_idx = 0;
+	unsigned int checksum = 0;
 	int ret;
 	
 	exfat_msg(EXFAT_DEBUG, "Create Volume Boot Record\n");
