@@ -56,7 +56,7 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	pbsx->fat_length = cpu_to_le32(finfo.fat_byte_len / bd->sector_size);
 	pbsx->clu_offset = cpu_to_le32(finfo.clu_byte_off / bd->sector_size);
 	pbsx->clu_count = cpu_to_le32(finfo.total_clu_cnt);
-	pbsx->root_cluster = cpu_to_le32(finfo.root_byte_off / ui->cluster_size);
+	pbsx->root_cluster = cpu_to_le32(finfo.root_start_clu);
 	pbsx->vol_serial = 1234;
 	pbsx->vol_flags = 0;
 	pbsx->sect_size_bits = bd->sector_size_bits;
@@ -142,7 +142,7 @@ static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
 	       sec_idx += BACKUP_BOOT_SEC_IDX;
 
 	memset(&eb, 0, sizeof(struct exbs));
-	eb.signature = cpu_to_le16(0xAA55);
+	eb.signature = cpu_to_le16(PBR_SIGNATURE);
 	for (i = 0; i < EXBOOT_SEC_NUM; i++) {
 		if (exfat_write_sector(bd, &eb, sec_idx++)) {
 			exfat_msg(EXFAT_ERROR,
@@ -178,6 +178,17 @@ static int exfat_write_oem_sector(struct exfat_blk_dev *bd,
 		ret = -1;
 		goto free_oem; 
 	}
+	
+	calc_checksum((char *)oem, bd->sector_size, false, checksum);
+
+	/* Zero out reserved sector */
+	memset(oem, 0, bd->sector_size);
+	ret = exfat_write_sector(bd, oem, sec_idx + 1);
+	if (ret) {
+		exfat_msg(EXFAT_ERROR, "reserved sector write failed\n");
+		ret = -1;
+		goto free_oem; 
+	}
 
 	calc_checksum((char *)oem, bd->sector_size, false, checksum);
 
@@ -189,7 +200,8 @@ free_oem:
 static int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
 		unsigned int checksum, bool is_backup)
 {
-	char *checksum_buf, ret = 0;
+	__le32 *checksum_buf;
+	int i, ret = 0;
 	unsigned int sec_idx = CHECKSUM_SEC_IDX; 
 
 	checksum_buf = malloc(bd->sector_size);
@@ -199,7 +211,9 @@ static int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
 	if (is_backup)
 		sec_idx += BACKUP_BOOT_SEC_IDX;
 
-	memset(checksum_buf, checksum, bd->sector_size / sizeof(int));
+	for (i = 0; i < bd->sector_size / sizeof(int); i++)
+		checksum_buf[i] = cpu_to_le32(checksum);
+
 	ret = exfat_write_sector(bd, checksum_buf, sec_idx);
 	if (ret) {
 		exfat_msg(EXFAT_ERROR, "checksum sector write failed\n");
@@ -214,7 +228,7 @@ free:
 static int exfat_create_volume_boot_record(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui, bool is_backup)
 {
-	unsigned int checksum = 0, sec_idx = 0;
+	unsigned int checksum = 0;
 	int ret;
 	
 	exfat_msg(EXFAT_DEBUG, "Create Volume Boot Record\n");
@@ -232,21 +246,43 @@ static int exfat_create_volume_boot_record(struct exfat_blk_dev *bd,
 	return exfat_write_checksum_sector(bd, checksum, is_backup);
 }
 
-static int write_fat_entry(int fd, unsigned int entry,
+static int write_fat_entry(int fd, unsigned int clu,
 		unsigned long long offset)
 {
 	int nbyte;
 
 	lseek(fd, finfo.fat_byte_off + (offset * sizeof(int)), SEEK_SET);
-	nbyte = write(fd, (char *) &entry, sizeof(unsigned int));
+	nbyte = write(fd, (char *) &clu, sizeof(unsigned int));
 	if (nbyte != sizeof(int)) {
 		exfat_msg(EXFAT_ERROR,
-			"write failed, offset : %llu, entry : %x\n",
-			offset, entry);
+			"write failed, offset : %llu, clu : %x\n",
+			offset, clu);
 		return -1;
 	}
 
 	return 0;
+}
+
+static int write_fat_entris(struct exfat_user_input *ui, int fd,
+		unsigned int clu, unsigned int length)
+{
+	int ret;
+	unsigned int count;
+
+	count = clu + round_up(finfo.bitmap_byte_len, ui->cluster_size) /
+		ui->cluster_size;
+
+	for (; clu < count - 1; clu++) {
+		ret = write_fat_entry(fd, clu + 1, clu);
+		if (ret)
+			return ret;
+	}
+
+	ret = write_fat_entry(fd, EXFAT_EOF_CLUSTER, clu);
+	if (ret)
+		return ret;
+
+	return clu;
 }
 
 static int exfat_create_fat_table(struct exfat_blk_dev *bd,
@@ -273,45 +309,23 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 	}
 
 	/* write bitmap entries */
-	count = EXFAT_FIRST_CLUSTER;
-	count += round_up(finfo.bitmap_byte_len, ui->cluster_size) /
-		ui->cluster_size;
-	for (clu = EXFAT_FIRST_CLUSTER; clu < count; clu++) {
-		ret = write_fat_entry(bd->dev_fd, clu, clu);
-		if (ret) {
-			exfat_msg(EXFAT_ERROR,
-				"bitmap entry write failed, clu : %d\n", clu);
-			return ret;
-		}
-	}
+	clu = write_fat_entris(ui, bd->dev_fd, EXFAT_FIRST_CLUSTER,
+		finfo.bitmap_byte_len);
+	if (clu < 0)
+		return ret;
 
 	/* write upcase table entries */
-	count += round_up(finfo.ut_byte_len, ui->cluster_size) /
-		ui->cluster_size;
-	finfo.ut_start_clu = clu;
-	for (; clu < count; clu++) {
-		ret = write_fat_entry(bd->dev_fd, clu, clu);
-		if (ret) {
-			exfat_msg(EXFAT_ERROR,
-				"upcase entry write failed, clu : %d\n", clu);
-			return ret;
-		}
-	}
+	clu = write_fat_entris(ui, bd->dev_fd, clu + 1, finfo.ut_byte_len);
+	if (clu < 0)
+		return ret;
 
 	/* write root directory entries */
-	count += round_up(finfo.root_byte_len, ui->cluster_size) / ui->cluster_size;
-	finfo.root_start_clu = clu;
-	for (; clu < count; clu++) {
-		ret = write_fat_entry(bd->dev_fd, clu, clu);
-		if (ret) {
-			exfat_msg(EXFAT_ERROR,
-				"root entry write failed, clu : %d\n", clu);
-			return ret;
-		}
-	}
+	clu = write_fat_entris(ui, bd->dev_fd, clu + 1, finfo.root_byte_len);
+	if (clu < 0)
+		return ret;
 
-	finfo.used_clu_cnt = count;
-	exfat_msg(EXFAT_DEBUG, "Total used cluster count : %d\n", count);
+	finfo.used_clu_cnt = clu + 1;
+	exfat_msg(EXFAT_DEBUG, "Total used cluster count : %d\n", finfo.used_clu_cnt);
 
 	return ret;
 }
@@ -485,13 +499,13 @@ static void exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	finfo.clu_byte_off = round_up(finfo.fat_byte_off + finfo.fat_byte_len,
 		DEFAULT_CLUSTER_SIZE);
 	finfo.total_clu_cnt = (bd->size - finfo.clu_byte_off) / ui->cluster_size;
-	finfo.bitmap_byte_off = EXFAT_REVERVED_CLUSTERS * ui->cluster_size;
+	finfo.bitmap_byte_off = finfo.clu_byte_off;
 	finfo.bitmap_byte_len = round_up(finfo.total_clu_cnt, 8) / 8;
+	finfo.ut_start_clu = round_up(EXFAT_REVERVED_CLUSTERS * ui->cluster_size + finfo.bitmap_byte_len, ui->cluster_size) / ui->cluster_size;  
 	finfo.ut_byte_off = round_up(finfo.bitmap_byte_off + finfo.bitmap_byte_len, ui->cluster_size);
-	finfo.ut_start_clu = finfo.ut_byte_off / ui->cluster_size;
 	finfo.ut_byte_len = EXFAT_UPCASE_TABLE_SIZE;
+	finfo.root_start_clu = round_up(finfo.ut_start_clu * ui->cluster_size + finfo.ut_byte_len, ui->cluster_size) / ui->cluster_size;
 	finfo.root_byte_off = round_up(finfo.ut_byte_off + finfo.ut_byte_len, ui->cluster_size);
-	finfo.root_start_clu = finfo.root_byte_off / ui->cluster_size;
 	finfo.root_byte_len = sizeof(struct exfat_dentry) * 3;
 }
 

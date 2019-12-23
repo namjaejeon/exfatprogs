@@ -11,20 +11,20 @@
 #define MAX_CLUSTER_SIZE	(32*1024*1024)
 
 struct exfat_mkfs_info {
-	int total_clu_cnt;
-	int used_clu_cnt;
-	int fat_byte_off;
-	int fat_byte_len;
-	int clu_byte_off;
-	int bitmap_byte_off;
-	int bitmap_byte_len;
-	int ut_byte_off;
-	int ut_start_clu;
-	int ut_clus_off;
-	int ut_byte_len;
-	int root_byte_off;
-	int root_byte_len;
-	int root_start_clu;
+	unsigned int total_clu_cnt;
+	unsigned int used_clu_cnt;
+	unsigned int fat_byte_off;
+	unsigned int fat_byte_len;
+	unsigned int clu_byte_off;
+	unsigned int bitmap_byte_off;
+	unsigned int bitmap_byte_len;
+	unsigned int ut_byte_off;
+	unsigned int ut_start_clu;
+	unsigned int ut_clus_off;
+	unsigned int ut_byte_len;
+	unsigned int root_byte_off;
+	unsigned int root_byte_len;
+	unsigned int root_start_clu;
 };
 
 extern struct exfat_mkfs_info finfo;
