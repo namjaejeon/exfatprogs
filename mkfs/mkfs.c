@@ -232,21 +232,43 @@ static int exfat_create_volume_boot_record(struct exfat_blk_dev *bd,
 	return exfat_write_checksum_sector(bd, checksum, is_backup);
 }
 
-static int write_fat_entry(int fd, unsigned int entry,
+static int write_fat_entry(int fd, unsigned int clu,
 		unsigned long long offset)
 {
 	int nbyte;
 
 	lseek(fd, finfo.fat_byte_off + (offset * sizeof(int)), SEEK_SET);
-	nbyte = write(fd, (char *) &entry, sizeof(unsigned int));
+	nbyte = write(fd, (char *) &clu, sizeof(unsigned int));
 	if (nbyte != sizeof(int)) {
 		exfat_msg(EXFAT_ERROR,
-			"write failed, offset : %llu, entry : %x\n",
-			offset, entry);
+			"write failed, offset : %llu, clu : %x\n",
+			offset, clu);
 		return -1;
 	}
 
 	return 0;
+}
+
+static int write_fat_entris(struct exfat_user_input *ui, int fd,
+		unsigned int clu, unsigned int length)
+{
+	int ret;
+	unsigned int count;
+
+	count = clu + round_up(finfo.bitmap_byte_len, ui->cluster_size) /
+		ui->cluster_size;
+
+	for (; clu < count; clu++) {
+		ret = write_fat_entry(fd, clu + 1, clu);
+		if (ret)
+			return ret;
+	}
+
+	ret = write_fat_entry(fd, EXFAT_EOF_CLUSTER, clu);
+	if (ret)
+		return ret;
+
+	return clu;
 }
 
 static int exfat_create_fat_table(struct exfat_blk_dev *bd,
@@ -273,45 +295,24 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 	}
 
 	/* write bitmap entries */
-	count = EXFAT_FIRST_CLUSTER;
-	count += round_up(finfo.bitmap_byte_len, ui->cluster_size) /
-		ui->cluster_size;
-	for (clu = EXFAT_FIRST_CLUSTER; clu < count; clu++) {
-		ret = write_fat_entry(bd->dev_fd, clu, clu);
-		if (ret) {
-			exfat_msg(EXFAT_ERROR,
-				"bitmap entry write failed, clu : %d\n", clu);
-			return ret;
-		}
-	}
+	clu = write_fat_entris(ui, bd->dev_fd, EXFAT_FIRST_CLUSTER,
+		finfo.bitmap_byte_len);
+	if (clu < 0)
+		return ret;
 
 	/* write upcase table entries */
-	count += round_up(finfo.ut_byte_len, ui->cluster_size) /
-		ui->cluster_size;
-	finfo.ut_start_clu = clu;
-	for (; clu < count; clu++) {
-		ret = write_fat_entry(bd->dev_fd, clu, clu);
-		if (ret) {
-			exfat_msg(EXFAT_ERROR,
-				"upcase entry write failed, clu : %d\n", clu);
-			return ret;
-		}
-	}
+	clu = write_fat_entris(ui, bd->dev_fd, clu, finfo.ut_byte_len);
+	if (clu < 0)
+		return ret;
+
 
 	/* write root directory entries */
-	count += round_up(finfo.root_byte_len, ui->cluster_size) / ui->cluster_size;
-	finfo.root_start_clu = clu;
-	for (; clu < count; clu++) {
-		ret = write_fat_entry(bd->dev_fd, clu, clu);
-		if (ret) {
-			exfat_msg(EXFAT_ERROR,
-				"root entry write failed, clu : %d\n", clu);
-			return ret;
-		}
-	}
+	clu = write_fat_entris(ui, bd->dev_fd, clu, finfo.root_byte_len);
+	if (clu < 0)
+		return ret;
 
-	finfo.used_clu_cnt = count;
-	exfat_msg(EXFAT_DEBUG, "Total used cluster count : %d\n", count);
+	finfo.used_clu_cnt = clu;
+	exfat_msg(EXFAT_DEBUG, "Total used cluster count : %d\n", finfo.used_clu_cnt);
 
 	return ret;
 }
