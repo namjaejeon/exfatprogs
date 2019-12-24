@@ -368,12 +368,9 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 	exfat_msg(EXFAT_DEBUG, "Create Root Directory entry\n");
 
 	/* Set volume label entry */
-	vol_len = strlen(ui->volume_label);
-	if (vol_len) {
-		ed[0].type = EXFAT_VOLUME;
-		strcpy(ed[0].vol_label, ui->volume_label);
-		ed[0].vol_char_cnt = strlen("EXFAT");
-	}
+	ed[0].type = EXFAT_VOLUME;
+	strcpy(ed[0].vol_label, ui->volume_label);
+	ed[0].vol_char_cnt = strlen("EXFAT");
 
 	/* Set bitmap entry */
 	ed[1].type = EXFAT_BITMAP;
@@ -535,7 +532,37 @@ int main(int argc, char *argv[])
         while ((c = getopt_long(argc, argv, "l:c:f:Vvh", opts, NULL)) != EOF)
                 switch (c) {
                 case 'l':
+		{
+			int i;
+			size_t mbslen;
+			wchar_t label[22];
+
+			mbslen = mbstowcs(NULL, optarg, 0);
+			printf("mbslen : %zd\n", mbslen);
+			if (mbslen == (size_t) -1) {
+				exfat_msg(EXFAT_ERROR, "mbstowcs return error(%d)\n", errno);
+				goto out;
+			}
+			
+			if (mbslen > VOLUME_LABEL_MAX_LEN - 1) {
+				exfat_msg(EXFAT_ERROR, "Volume Label is too longer(MAX 21 characters)\n");
+				goto out;
+			}
+
+			if (mbstowcs(label, optarg, mbslen + 1) == (size_t) -1) {
+				exfat_msg(EXFAT_ERROR, "mbstowcs return error(%d)\n", errno);
+				goto out;
+			}
+
+			for (i = 0; i < VOLUME_LABEL_MAX_LEN; i++) {
+				if (exfat_bad_char(label[i])) {
+					exfat_msg(EXFAT_ERROR, "bad char error(%x)\n", label[i]);
+					goto out;
+				}
+			}
+
 			break;
+		}
                 case 'c':
 			ui.cluster_size = atoi(optarg);
 			if (ui.cluster_size > MAX_CLUSTER_SIZE) {

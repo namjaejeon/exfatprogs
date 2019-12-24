@@ -6,6 +6,7 @@
 #ifndef _EXFAT_TOOLS_H
 
 #include <stdbool.h>
+#include <wchar.h>
 
 #define EXFAT_MIN_NUM_SEC_VOL		(2048)
 #define EXFAT_MAX_NUM_SEC_VOL		((2 << 64) - 1)
@@ -45,9 +46,9 @@ struct exfat_user_input {
 
 void exfat_set_bit(struct exfat_blk_dev *bd, char *bitmap,
 		unsigned int clu);
-
 void exfat_clear_bit(struct exfat_blk_dev *bd, char *bitmap,
 		unsigned int clu);
+wchar_t exfat_bad_char(wchar_t w);
 
 /*
  * Exfat Print

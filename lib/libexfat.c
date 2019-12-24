@@ -62,3 +62,11 @@ void exfat_clear_bit(struct exfat_blk_dev *bd, char *bitmap,
 
 	clear_bit_le(b, bitmap);
 }
+
+wchar_t exfat_bad_char(wchar_t w)
+{
+	return (w < 0x0020)
+		|| (w == '*') || (w == '?') || (w == '<') || (w == '>')
+		|| (w == '|') || (w == '"') || (w == ':') || (w == '/')
+		|| (w == '\\');
+}
