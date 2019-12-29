@@ -515,6 +515,19 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 
 static int exfat_zero_out_disk(struct exfat_blk_dev *bd)
 {
+	int nbytes;
+	int chunk_size = 128 * 1024;
+	unsigned long long total_written = 0;
+
+	do {
+
+		nbytes = write(bd->dev_fd, 0, chunk_size);
+		if (nbytes <= 0)
+			break;
+		total_written += nbytes;
+	} while(total_written <= bd->size);
+
+	exfat_msg(EXFAT_DEBUG, "zero out written size : %llu, disk size : %llu\n", total_written, bd->size);
 	return 0;	
 }
 
@@ -566,7 +579,7 @@ int main(int argc, char *argv[])
 			ui.cluster_size = atoi(optarg);
 			if (ui.cluster_size > EXFAT_MAX_CLUSTER_SIZE) {
 				exfat_msg(EXFAT_ERROR,
-					"cluster size(%d) exceeds max cluster size(%d)",
+					"cluster size(%d) exceeds max cluster size(%d)\n",
 					ui.cluster_size, EXFAT_MAX_CLUSTER_SIZE);
 				goto out;
 			}
