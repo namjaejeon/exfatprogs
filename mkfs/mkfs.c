@@ -564,10 +564,10 @@ int main(int argc, char *argv[])
 		}
                 case 'c':
 			ui.cluster_size = atoi(optarg);
-			if (ui.cluster_size > MAX_CLUSTER_SIZE) {
+			if (ui.cluster_size > EXFAT_MAX_CLUSTER_SIZE) {
 				exfat_msg(EXFAT_ERROR,
 					"cluster size(%d) exceeds max cluster size(%d)",
-					ui.cluster_size, MAX_CLUSTER_SIZE);
+					ui.cluster_size, EXFAT_MAX_CLUSTER_SIZE);
 				goto out;
 			}
 			break;
