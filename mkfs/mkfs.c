@@ -518,12 +518,22 @@ static int exfat_zero_out_disk(struct exfat_blk_dev *bd)
 	int nbytes;
 	int chunk_size = 128 * 1024;
 	unsigned long long total_written = 0;
+	char *buf;
 
+	buf = malloc(chunk_size);
+	if (!buf)
+		return -1;
+
+	memset(buf, 0, chunk_size);
+	lseek(bd->dev_fd, 0, SEEK_SET);
 	do {
 
-		nbytes = write(bd->dev_fd, 0, chunk_size);
-		if (nbytes <= 0)
+		nbytes = write(bd->dev_fd, buf, chunk_size);
+		if (nbytes <= 0) {
+			if (nbytes < 0)
+				exfat_msg(EXFAT_ERROR, "write failed(errno : %d)\n", errno);
 			break;
+		}
 		total_written += nbytes;
 	} while(total_written <= bd->size);
 
@@ -542,7 +552,7 @@ int main(int argc, char *argv[])
 	init_user_input(&ui);
 
         opterr = 0;
-        while ((c = getopt_long(argc, argv, "l:c:f:Vvh", opts, NULL)) != EOF)
+        while ((c = getopt_long(argc, argv, "l:c:fVvh", opts, NULL)) != EOF)
                 switch (c) {
                 case 'l':
 		{
