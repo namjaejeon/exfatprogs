@@ -61,7 +61,7 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	pbsx->vol_serial = 1234;
 	pbsx->vol_flags = 0;
 	pbsx->sect_size_bits = bd->sector_size_bits;
-	pbsx->sect_per_clus_bits = log2(ui->sec_per_clu);
+	pbsx->sect_per_clus_bits = log2(ui->cluster_size / bd->sector_size);
 	pbsx->num_fats = 1;
 	/* fs_version[0] : minor and fs_version[1] : major */
 	pbsx->fs_version[0] = 0;
@@ -484,17 +484,10 @@ static void init_user_input(struct exfat_user_input *ui)
 	ui->quick = true;
 }
 
-static int verify_user_input(struct exfat_blk_dev *bd,
+static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
-	ui->sec_per_clu = ui->cluster_size / bd->sector_size;
-	return 0;
-}
-
-static void exfat_build_mkfs_info(struct exfat_blk_dev *bd,
-		struct exfat_user_input *ui)
-{
-	if (DEFAULT_CLUSTER_SIZE < ui->sec_per_clu)
+	if (DEFAULT_CLUSTER_SIZE < ui->cluster_size)
 		finfo.fat_byte_off = ui->cluster_size;
 	else
 		finfo.fat_byte_off = DEFAULT_CLUSTER_SIZE;
@@ -503,6 +496,11 @@ static void exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	finfo.clu_byte_off = round_up(finfo.fat_byte_off + finfo.fat_byte_len,
 		DEFAULT_CLUSTER_SIZE);
 	finfo.total_clu_cnt = (bd->size - finfo.clu_byte_off) / ui->cluster_size;
+	if (finfo.total_clu_cnt > EXFAT_MAX_NUM_CLUSTER) {
+		exfat_msg(EXFAT_ERROR, "cluster size is too small\n");
+		return -1;
+	}
+
 	finfo.bitmap_byte_off = finfo.clu_byte_off;
 	finfo.bitmap_byte_len = round_up(finfo.total_clu_cnt, 8) / 8;
 	finfo.ut_start_clu = round_up(EXFAT_REVERVED_CLUSTERS * ui->cluster_size + finfo.bitmap_byte_len, ui->cluster_size) / ui->cluster_size;  
@@ -511,6 +509,8 @@ static void exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	finfo.root_start_clu = round_up(finfo.ut_start_clu * ui->cluster_size + finfo.ut_byte_len, ui->cluster_size) / ui->cluster_size;
 	finfo.root_byte_off = round_up(finfo.ut_byte_off + finfo.ut_byte_len, ui->cluster_size);
 	finfo.root_byte_len = sizeof(struct exfat_dentry) * 3;
+
+	return 0;
 }
 
 static int exfat_zero_out_disk(struct exfat_blk_dev *bd)
@@ -538,7 +538,6 @@ int main(int argc, char *argv[])
 			wchar_t label[22];
 
 			mbslen = mbstowcs(NULL, optarg, 0);
-			printf("mbslen : %zd\n", mbslen);
 			if (mbslen == (size_t) -1) {
 				exfat_msg(EXFAT_ERROR, "mbstowcs return error(%d)\n", errno);
 				goto out;
@@ -597,17 +596,15 @@ int main(int argc, char *argv[])
 	if (ret < 0)
 		goto out;
 
-	ret = verify_user_input(&bd, &ui);
-	if (ret < 0)
-		goto out;
-
 	if (ui.quick == false) {
 		ret = exfat_zero_out_disk(&bd);
 		if (ret)
 			goto out;
 	}
 
-	exfat_build_mkfs_info(&bd, &ui);
+	ret = exfat_build_mkfs_info(&bd, &ui);
+	if (ret)
+		goto out;
 
 	ret = exfat_create_volume_boot_record(&bd, &ui, 0);
 	if (ret)
