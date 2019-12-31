@@ -343,7 +343,7 @@ static int exfat_create_bitmap(struct exfat_blk_dev *bd,
 	if (!bitmap)
 		return -1;
 
-	for (i = 0; i < finfo.used_clu_cnt; i++)
+	for (i = 0; i < finfo.used_clu_cnt - EXFAT_FIRST_CLUSTER; i++)
 		exfat_set_bit(bd, bitmap, i);
 
 	lseek(bd->dev_fd, finfo.bitmap_byte_off, SEEK_SET);
