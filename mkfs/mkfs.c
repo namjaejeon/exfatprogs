@@ -652,6 +652,7 @@ int main(int argc, char *argv[])
 
 	ret = exfat_create_root_dir(&bd, &ui);
 
+	fsync(bd.dev_fd);
 out:
 	return ret;
 }
