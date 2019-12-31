@@ -370,7 +370,7 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 	/* Set volume label entry */
 	ed[0].type = EXFAT_VOLUME;
 	strcpy(ed[0].vol_label, ui->volume_label);
-	ed[0].vol_char_cnt = strlen("EXFAT");
+	ed[0].vol_char_cnt = 0;
 
 	/* Set bitmap entry */
 	ed[1].type = EXFAT_BITMAP;
@@ -654,5 +654,6 @@ int main(int argc, char *argv[])
 
 	fsync(bd.dev_fd);
 out:
+	close(bd.dev_fd);
 	return ret;
 }
