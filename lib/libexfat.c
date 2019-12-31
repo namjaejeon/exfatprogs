@@ -15,20 +15,20 @@
 #define BIT_MASK(nr)            ((1) << ((nr) % 32))
 #define BIT_WORD(nr)            ((nr) / 32)
 
-static inline void set_bit(int nr, volatile unsigned int *addr)
+static inline void set_bit(int nr, unsigned int *addr)
 {
-        unsigned long mask = BIT_MASK(nr);
-        unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
+	unsigned long mask = BIT_MASK(nr);
+	unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
 
-        *p  |= mask;
+	*p  |= mask;
 }
 
-static inline void clear_bit(int nr, volatile unsigned int *addr)
+static inline void clear_bit(int nr, unsigned int *addr)
 {
-        unsigned long mask = BIT_MASK(nr);
-        unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
+	unsigned long mask = BIT_MASK(nr);
+	unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
 
-        *p &= ~mask;
+	*p &= ~mask;
 }
 
 static inline void set_bit_le(int nr, void *addr)
@@ -69,4 +69,18 @@ wchar_t exfat_bad_char(wchar_t w)
 		|| (w == '*') || (w == '?') || (w == '<') || (w == '>')
 		|| (w == '|') || (w == '"') || (w == ':') || (w == '/')
 		|| (w == '\\');
+}
+
+void boot_calc_checksum(unsigned char *sector, unsigned short size,
+		bool is_boot_sec, unsigned int *checksum)
+{
+	unsigned int index;
+
+	for (index = 0; index < size; index++) {
+		if (is_boot_sec == true &&
+		    ((index == 106) || (index == 107) || (index == 112)))
+			continue;
+		*checksum = ((*checksum & 1) ? 0x80000000 : 0) +
+			(*checksum >> 1) + sector[index];
+	}
 }
