@@ -51,6 +51,8 @@ void exfat_set_bit(struct exfat_blk_dev *bd, char *bitmap,
 void exfat_clear_bit(struct exfat_blk_dev *bd, char *bitmap,
 		unsigned int clu);
 wchar_t exfat_bad_char(wchar_t w);
+void boot_calc_checksum(unsigned char *sector, unsigned short size,
+		bool is_boot_sec, unsigned int *checksum);
 
 /*
  * Exfat Print

@@ -70,3 +70,18 @@ wchar_t exfat_bad_char(wchar_t w)
 		|| (w == '|') || (w == '"') || (w == ':') || (w == '/')
 		|| (w == '\\');
 }
+
+void boot_calc_checksum(unsigned char *sector, unsigned short size,
+		bool is_boot_sec, unsigned int *checksum)
+{
+	unsigned int index;
+
+	for (index = 0; index < size; index++)
+	{
+		if (is_boot_sec == true &&
+		    ((index == 106) || (index == 107) || (index == 112)))
+			continue;
+		*checksum = ((*checksum & 1) ? 0x80000000 : 0) +
+			(*checksum >> 1) + sector[index];
+	}
+}
