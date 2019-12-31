@@ -8,7 +8,7 @@
 #define DEFAULT_CLUSTER_SIZE	(1024 * 1024)
 #define DEFAULT_SECTOR_SIZE	(512)
 #define MIN_NUM_SECTOR		(2048)
-#define MAX_CLUSTER_SIZE	(32*1024*1024)
+#define EXFAT_MAX_CLUSTER_SIZE	(32*1024*1024)
 
 struct exfat_mkfs_info {
 	unsigned int total_clu_cnt;

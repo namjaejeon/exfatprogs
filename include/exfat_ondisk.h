@@ -139,6 +139,7 @@ struct expbr {
 	struct exbs eb[8];
 };
 
+#define VOLUME_LABEL_MAX_LEN	22
 struct exfat_dentry {
 	__u8 type;
 	union {

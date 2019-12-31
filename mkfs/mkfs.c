@@ -61,7 +61,7 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	pbsx->vol_serial = 1234;
 	pbsx->vol_flags = 0;
 	pbsx->sect_size_bits = bd->sector_size_bits;
-	pbsx->sect_per_clus_bits = log2(ui->sec_per_clu);
+	pbsx->sect_per_clus_bits = log2(ui->cluster_size / bd->sector_size);
 	pbsx->num_fats = 1;
 	/* fs_version[0] : minor and fs_version[1] : major */
 	pbsx->fs_version[0] = 0;
@@ -343,7 +343,7 @@ static int exfat_create_bitmap(struct exfat_blk_dev *bd,
 	if (!bitmap)
 		return -1;
 
-	for (i = 0; i < finfo.used_clu_cnt; i++)
+	for (i = 0; i < finfo.used_clu_cnt - EXFAT_FIRST_CLUSTER; i++)
 		exfat_set_bit(bd, bitmap, i);
 
 	lseek(bd->dev_fd, finfo.bitmap_byte_off, SEEK_SET);
@@ -368,12 +368,9 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 	exfat_msg(EXFAT_DEBUG, "Create Root Directory entry\n");
 
 	/* Set volume label entry */
-	vol_len = strlen(ui->volume_label);
-	if (vol_len) {
-		ed[0].type = EXFAT_VOLUME;
-		strcpy(ed[0].vol_label, ui->volume_label);
-		ed[0].vol_char_cnt = strlen("EXFAT");
-	}
+	ed[0].type = EXFAT_VOLUME;
+	strcpy(ed[0].vol_label, ui->volume_label);
+	ed[0].vol_char_cnt = strlen("EXFAT");
 
 	/* Set bitmap entry */
 	ed[1].type = EXFAT_BITMAP;
@@ -487,17 +484,10 @@ static void init_user_input(struct exfat_user_input *ui)
 	ui->quick = true;
 }
 
-static int verify_user_input(struct exfat_blk_dev *bd,
+static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
-	ui->sec_per_clu = ui->cluster_size / bd->sector_size;
-	return 0;
-}
-
-static void exfat_build_mkfs_info(struct exfat_blk_dev *bd,
-		struct exfat_user_input *ui)
-{
-	if (DEFAULT_CLUSTER_SIZE < ui->sec_per_clu)
+	if (DEFAULT_CLUSTER_SIZE < ui->cluster_size)
 		finfo.fat_byte_off = ui->cluster_size;
 	else
 		finfo.fat_byte_off = DEFAULT_CLUSTER_SIZE;
@@ -506,6 +496,11 @@ static void exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	finfo.clu_byte_off = round_up(finfo.fat_byte_off + finfo.fat_byte_len,
 		DEFAULT_CLUSTER_SIZE);
 	finfo.total_clu_cnt = (bd->size - finfo.clu_byte_off) / ui->cluster_size;
+	if (finfo.total_clu_cnt > EXFAT_MAX_NUM_CLUSTER) {
+		exfat_msg(EXFAT_ERROR, "cluster size is too small\n");
+		return -1;
+	}
+
 	finfo.bitmap_byte_off = finfo.clu_byte_off;
 	finfo.bitmap_byte_len = round_up(finfo.total_clu_cnt, 8) / 8;
 	finfo.ut_start_clu = round_up(EXFAT_REVERVED_CLUSTERS * ui->cluster_size + finfo.bitmap_byte_len, ui->cluster_size) / ui->cluster_size;  
@@ -514,10 +509,35 @@ static void exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	finfo.root_start_clu = round_up(finfo.ut_start_clu * ui->cluster_size + finfo.ut_byte_len, ui->cluster_size) / ui->cluster_size;
 	finfo.root_byte_off = round_up(finfo.ut_byte_off + finfo.ut_byte_len, ui->cluster_size);
 	finfo.root_byte_len = sizeof(struct exfat_dentry) * 3;
+
+	return 0;
 }
 
 static int exfat_zero_out_disk(struct exfat_blk_dev *bd)
 {
+	int nbytes;
+	int chunk_size = 128 * 1024;
+	unsigned long long total_written = 0;
+	char *buf;
+
+	buf = malloc(chunk_size);
+	if (!buf)
+		return -1;
+
+	memset(buf, 0, chunk_size);
+	lseek(bd->dev_fd, 0, SEEK_SET);
+	do {
+
+		nbytes = write(bd->dev_fd, buf, chunk_size);
+		if (nbytes <= 0) {
+			if (nbytes < 0)
+				exfat_msg(EXFAT_ERROR, "write failed(errno : %d)\n", errno);
+			break;
+		}
+		total_written += nbytes;
+	} while(total_written <= bd->size);
+
+	exfat_msg(EXFAT_DEBUG, "zero out written size : %llu, disk size : %llu\n", total_written, bd->size);
 	return 0;	
 }
 
@@ -532,16 +552,45 @@ int main(int argc, char *argv[])
 	init_user_input(&ui);
 
         opterr = 0;
-        while ((c = getopt_long(argc, argv, "l:c:f:Vvh", opts, NULL)) != EOF)
+        while ((c = getopt_long(argc, argv, "l:c:fVvh", opts, NULL)) != EOF)
                 switch (c) {
                 case 'l':
+		{
+			int i;
+			size_t mbslen;
+			wchar_t label[22];
+
+			mbslen = mbstowcs(NULL, optarg, 0);
+			if (mbslen == (size_t) -1) {
+				exfat_msg(EXFAT_ERROR, "mbstowcs return error(%d)\n", errno);
+				goto out;
+			}
+			
+			if (mbslen > VOLUME_LABEL_MAX_LEN - 1) {
+				exfat_msg(EXFAT_ERROR, "Volume Label is too longer(MAX 21 characters)\n");
+				goto out;
+			}
+
+			if (mbstowcs(label, optarg, mbslen + 1) == (size_t) -1) {
+				exfat_msg(EXFAT_ERROR, "mbstowcs return error(%d)\n", errno);
+				goto out;
+			}
+
+			for (i = 0; i < VOLUME_LABEL_MAX_LEN; i++) {
+				if (exfat_bad_char(label[i])) {
+					exfat_msg(EXFAT_ERROR, "bad char error(%x)\n", label[i]);
+					goto out;
+				}
+			}
+
 			break;
+		}
                 case 'c':
 			ui.cluster_size = atoi(optarg);
-			if (ui.cluster_size > MAX_CLUSTER_SIZE) {
+			if (ui.cluster_size > EXFAT_MAX_CLUSTER_SIZE) {
 				exfat_msg(EXFAT_ERROR,
-					"cluster size(%d) exceeds max cluster size(%d)",
-					ui.cluster_size, MAX_CLUSTER_SIZE);
+					"cluster size(%d) exceeds max cluster size(%d)\n",
+					ui.cluster_size, EXFAT_MAX_CLUSTER_SIZE);
 				goto out;
 			}
 			break;
@@ -570,17 +619,15 @@ int main(int argc, char *argv[])
 	if (ret < 0)
 		goto out;
 
-	ret = verify_user_input(&bd, &ui);
-	if (ret < 0)
-		goto out;
-
 	if (ui.quick == false) {
 		ret = exfat_zero_out_disk(&bd);
 		if (ret)
 			goto out;
 	}
 
-	exfat_build_mkfs_info(&bd, &ui);
+	ret = exfat_build_mkfs_info(&bd, &ui);
+	if (ret)
+		goto out;
 
 	ret = exfat_create_volume_boot_record(&bd, &ui, 0);
 	if (ret)
@@ -605,6 +652,7 @@ int main(int argc, char *argv[])
 
 	ret = exfat_create_root_dir(&bd, &ui);
 
+	fsync(bd.dev_fd);
 out:
 	return ret;
 }
