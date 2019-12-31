@@ -43,7 +43,7 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	pbsx->clu_offset = cpu_to_le32(finfo.clu_byte_off / bd->sector_size);
 	pbsx->clu_count = cpu_to_le32(finfo.total_clu_cnt);
 	pbsx->root_cluster = cpu_to_le32(finfo.root_start_clu);
-	pbsx->vol_serial = 1234;
+	pbsx->vol_serial = cpu_to_le32(1234);
 	pbsx->vol_flags = 0;
 	pbsx->sect_size_bits = bd->sector_size_bits;
 	pbsx->sect_per_clus_bits = log2(ui->cluster_size / bd->sector_size);
@@ -232,13 +232,13 @@ static int exfat_create_volume_boot_record(struct exfat_blk_dev *bd,
 	return exfat_write_checksum_sector(bd, checksum, is_backup);
 }
 
-static int write_fat_entry(int fd, unsigned int clu,
+static int write_fat_entry(int fd, __le32 clu,
 		unsigned long long offset)
 {
 	int nbyte;
 
-	lseek(fd, finfo.fat_byte_off + (offset * sizeof(int)), SEEK_SET);
-	nbyte = write(fd, (char *) &clu, sizeof(unsigned int));
+	lseek(fd, finfo.fat_byte_off + (offset * sizeof(__le32)), SEEK_SET);
+	nbyte = write(fd, (__u8 *) &clu, sizeof(__le32));
 	if (nbyte != sizeof(int)) {
 		exfat_msg(EXFAT_ERROR,
 			"write failed, offset : %llu, clu : %x\n",
@@ -259,12 +259,12 @@ static int write_fat_entris(struct exfat_user_input *ui, int fd,
 		ui->cluster_size;
 
 	for (; clu < count - 1; clu++) {
-		ret = write_fat_entry(fd, clu + 1, clu);
+		ret = write_fat_entry(fd, cpu_to_le32(clu + 1), clu);
 		if (ret)
 			return ret;
 	}
 
-	ret = write_fat_entry(fd, EXFAT_EOF_CLUSTER, clu);
+	ret = write_fat_entry(fd, cpu_to_le32(EXFAT_EOF_CLUSTER), clu);
 	if (ret)
 		return ret;
 
@@ -279,7 +279,7 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 	exfat_msg(EXFAT_DEBUG, "Create FAT Table\n");
 
 	/* fat entry 0 should be media type field(0xF8) */
-	ret = write_fat_entry(bd->dev_fd, 0xfffffff8, 0);
+	ret = write_fat_entry(bd->dev_fd, cpu_to_le32(0xfffffff8), 0);
 	if (ret) {
 		exfat_msg(EXFAT_ERROR,
 			"fat 0 entry write failed\n");
@@ -287,7 +287,7 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 	}
 
 	/* fat entry 1 is historical precedence(0xFFFFFFFF) */
-	ret = write_fat_entry(bd->dev_fd, 0xffffffff, 1);
+	ret = write_fat_entry(bd->dev_fd, cpu_to_le32(0xffffffff), 1);
 	if (ret) {
 		exfat_msg(EXFAT_ERROR,
 			"fat 1 entry write failed\n");
@@ -360,14 +360,14 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 	/* Set bitmap entry */
 	ed[1].type = EXFAT_BITMAP;
 	ed[1].bitmap_flags = 0;
-	ed[1].bitmap_start_clu = EXFAT_FIRST_CLUSTER;
-	ed[1].bitmap_size = finfo.bitmap_byte_len;
+	ed[1].bitmap_start_clu = cpu_to_le32(EXFAT_FIRST_CLUSTER);
+	ed[1].bitmap_size = cpu_to_le64(finfo.bitmap_byte_len);
 
 	/* Set upcase table entry */
 	ed[2].type = EXFAT_UPCASE;
 	ed[2].upcase_checksum = cpu_to_le32(0xe619d30d);
-	ed[2].upcase_start_clu = finfo.ut_start_clu;
-	ed[2].upcase_size = EXFAT_UPCASE_TABLE_SIZE;
+	ed[2].upcase_start_clu = cpu_to_le32(finfo.ut_start_clu);
+	ed[2].upcase_size = cpu_to_le32(EXFAT_UPCASE_TABLE_SIZE);
 
 	lseek(bd->dev_fd, finfo.root_byte_off, SEEK_SET);
 	nbytes = write(bd->dev_fd, ed, dentries_len);
