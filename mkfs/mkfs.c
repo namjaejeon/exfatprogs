@@ -32,7 +32,7 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	pbpb->jmp_boot[0] = 0xeb;
 	pbpb->jmp_boot[1] = 0x76;
 	pbpb->jmp_boot[2] = 0x90;
-	memcpy(pbpb->oem_name, "EXFAT   ", 8);	
+	memcpy(pbpb->oem_name, "EXFAT   ", 8);
 	memset(pbpb->res_zero, 0, 53);
 
 	/* Fill exfat extend BIOS paramemter block */
@@ -53,7 +53,7 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	pbsx->fs_version[1] = 1;
 	memset(pbsx->reserved2, 0, 7);
 
-	memset(ppbr->boot_code, 0, 390); 
+	memset(ppbr->boot_code, 0, 390);
 	ppbr->signature = cpu_to_le16(PBR_SIGNATURE);
 
 	exfat_msg(EXFAT_DEBUG, "Volume Length(sectors) : %llu\n",
@@ -133,10 +133,10 @@ static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
 {
 	struct exbs eb;
 	int i;
-	unsigned int sec_idx = EXBOOT_SEC_IDX; 
+	unsigned int sec_idx = EXBOOT_SEC_IDX;
 
 	if (is_backup)
-	       sec_idx += BACKUP_BOOT_SEC_IDX;
+		sec_idx += BACKUP_BOOT_SEC_IDX;
 
 	memset(&eb, 0, sizeof(struct exbs));
 	eb.signature = cpu_to_le16(PBR_SIGNATURE);
@@ -160,7 +160,7 @@ static int exfat_write_oem_sector(struct exfat_blk_dev *bd,
 {
 	char *oem;
 	int ret = 0;
-	unsigned int sec_idx = OEM_SEC_IDX; 
+	unsigned int sec_idx = OEM_SEC_IDX;
 
 	oem = malloc(bd->sector_size);
 	if (!oem)
@@ -174,9 +174,9 @@ static int exfat_write_oem_sector(struct exfat_blk_dev *bd,
 	if (ret) {
 		exfat_msg(EXFAT_ERROR, "oem sector write failed\n");
 		ret = -1;
-		goto free_oem; 
+		goto free_oem;
 	}
-	
+
 	boot_calc_checksum((unsigned char *)oem, bd->sector_size, false,
 		checksum);
 
@@ -186,7 +186,7 @@ static int exfat_write_oem_sector(struct exfat_blk_dev *bd,
 	if (ret) {
 		exfat_msg(EXFAT_ERROR, "reserved sector write failed\n");
 		ret = -1;
-		goto free_oem; 
+		goto free_oem;
 	}
 
 	boot_calc_checksum((unsigned char *)oem, bd->sector_size, false,
@@ -202,7 +202,7 @@ static int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
 {
 	__le32 *checksum_buf;
 	int i, ret = 0;
-	unsigned int sec_idx = CHECKSUM_SEC_IDX; 
+	unsigned int sec_idx = CHECKSUM_SEC_IDX;
 
 	checksum_buf = malloc(bd->sector_size);
 	if (!checksum_buf)
@@ -230,7 +230,7 @@ static int exfat_create_volume_boot_record(struct exfat_blk_dev *bd,
 {
 	unsigned int checksum = 0;
 	int ret;
-	
+
 	exfat_msg(EXFAT_DEBUG, "Create Volume Boot Record\n");
 
 	ret = exfat_write_boot_sector(bd, ui, &checksum, is_backup);
@@ -399,10 +399,12 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 static inline unsigned int sector_size_bits(unsigned int size)
 {
 	unsigned int bits = 8;
+
 	do {
 		bits++;
 		size >>= 1;
 	} while (size > 256);
+
 	return bits;
 }
 
@@ -449,14 +451,14 @@ out:
 }
 
 static void usage(void)
-{       
+{
 	fprintf(stderr, "Usage: mkfs.exfat\n");
 	fprintf(stderr, "\t-l=string | --volume-label=string	Set volume label\n");
 	fprintf(stderr, "\t-c=size | --cluster-size=size	Set cluster size\n");
 	fprintf(stderr, "\t-f | --full-format			Full format\n");
 	fprintf(stderr, "\t-V | --version			Show version\n");
-	fprintf(stderr, "\t-v | --verbose		  	Print debug\n");
-	fprintf(stderr, "\t-h | --help			  	Show help\n");
+	fprintf(stderr, "\t-v | --verbose			Print debug\n");
+	fprintf(stderr, "\t-h | --help				Show help\n");
 
 	exit(EXIT_FAILURE);
 }
@@ -497,7 +499,7 @@ static void exfat_set_default_cluster_size(struct exfat_blk_dev *bd,
 static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
-	if (DEFAULT_CLUSTER_SIZE < ui->cluster_size)
+	if (ui->cluster_size > DEFAULT_CLUSTER_SIZE)
 		finfo.fat_byte_off = ui->cluster_size;
 	else
 		finfo.fat_byte_off = DEFAULT_CLUSTER_SIZE;
@@ -516,7 +518,7 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	finfo.bitmap_byte_len = round_up(finfo.total_clu_cnt, 8) / 8;
 	finfo.ut_start_clu = round_up(EXFAT_REVERVED_CLUSTERS *
 		ui->cluster_size + finfo.bitmap_byte_len, ui->cluster_size) /
-		ui->cluster_size;  
+		ui->cluster_size;
 	finfo.ut_byte_off = round_up(finfo.bitmap_byte_off +
 		finfo.bitmap_byte_len, ui->cluster_size);
 	finfo.ut_byte_len = EXFAT_UPCASE_TABLE_SIZE;
@@ -552,28 +554,28 @@ static int exfat_zero_out_disk(struct exfat_blk_dev *bd)
 			break;
 		}
 		total_written += nbytes;
-	} while(total_written <= bd->size);
+	} while (total_written <= bd->size);
 
 	exfat_msg(EXFAT_DEBUG,
 		"zero out written size : %llu, disk size : %llu\n",
 		total_written, bd->size);
-	return 0;	
+	return 0;
 }
 
 int main(int argc, char *argv[])
 {
 	int c;
-        int ret = EXIT_FAILURE;
+	int ret = EXIT_FAILURE;
 	char *blk_dev_name;
 	struct exfat_blk_dev bd;
 	struct exfat_user_input ui;
 
 	init_user_input(&ui);
 
-        opterr = 0;
-        while ((c = getopt_long(argc, argv, "l:c:fVvh", opts, NULL)) != EOF)
-                switch (c) {
-                case 'l':
+	opterr = 0;
+	while ((c = getopt_long(argc, argv, "l:c:fVvh", opts, NULL)) != EOF)
+		switch (c) {
+		case 'l':
 		{
 			int i;
 			size_t mbslen;
@@ -592,7 +594,8 @@ int main(int argc, char *argv[])
 				goto out;
 			}
 
-			if (mbstowcs(label, optarg, mbslen + 1) == (size_t) -1) {
+			if (mbstowcs(label, optarg, mbslen + 1) ==
+				     (size_t) -1) {
 				exfat_msg(EXFAT_ERROR,
 					"mbstowcs return error(%d)\n", errno);
 				goto out;
@@ -601,14 +604,15 @@ int main(int argc, char *argv[])
 			for (i = 0; i < VOLUME_LABEL_MAX_LEN; i++) {
 				if (exfat_bad_char(label[i])) {
 					exfat_msg(EXFAT_ERROR,
-						"bad char error(%x)\n", label[i]);
+						"bad char error(%x)\n",
+						label[i]);
 					goto out;
 				}
 			}
 
 			break;
 		}
-                case 'c':
+		case 'c':
 			ui.cluster_size = atoi(optarg);
 			if (ui.cluster_size > EXFAT_MAX_CLUSTER_SIZE) {
 				exfat_msg(EXFAT_ERROR,
@@ -617,20 +621,20 @@ int main(int argc, char *argv[])
 				goto out;
 			}
 			break;
-                case 'f':
+		case 'f':
 			ui.quick = false;
 			break;
 		case 'V':
 			show_version();
 			break;
-                case 'v':
+		case 'v':
 			print_level = EXFAT_DEBUG;
-                        break;
-                case '?':
-                case 'h':
-                default:
-                        usage();
-        }
+			break;
+		case '?':
+		case 'h':
+		default:
+			usage();
+	}
 
 	if (argc - optind != 1)
 		usage();

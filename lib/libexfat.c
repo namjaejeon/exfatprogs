@@ -17,18 +17,18 @@
 
 static inline void set_bit(int nr, unsigned int *addr)
 {
-        unsigned long mask = BIT_MASK(nr);
-        unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
+	unsigned long mask = BIT_MASK(nr);
+	unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
 
-        *p  |= mask;
+	*p  |= mask;
 }
 
 static inline void clear_bit(int nr, unsigned int *addr)
 {
-        unsigned long mask = BIT_MASK(nr);
-        unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
+	unsigned long mask = BIT_MASK(nr);
+	unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
 
-        *p &= ~mask;
+	*p &= ~mask;
 }
 
 static inline void set_bit_le(int nr, void *addr)
@@ -76,8 +76,7 @@ void boot_calc_checksum(unsigned char *sector, unsigned short size,
 {
 	unsigned int index;
 
-	for (index = 0; index < size; index++)
-	{
+	for (index = 0; index < size; index++) {
 		if (is_boot_sec == true &&
 		    ((index == 106) || (index == 107) || (index == 112)))
 			continue;
