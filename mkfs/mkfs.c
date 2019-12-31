@@ -408,6 +408,17 @@ static inline unsigned int sector_size_bits(unsigned int size)
 	return bits;
 }
 
+static void exfat_set_default_cluster_size(struct exfat_blk_dev *bd,
+		struct exfat_user_input *ui)
+{
+	if (256 * MB >= bd->size)
+		ui->cluster_size = 4 * KB;
+	else if (32 * GB >= bd->size)
+		ui->cluster_size = 32 * KB;
+	else
+		ui->cluster_size = 128 * KB;
+}
+
 static int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 		struct exfat_blk_dev *bd)
 {
@@ -430,6 +441,9 @@ static int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 
 	bd->dev_fd = fd;
 	bd->size = blk_dev_size;
+	if (!ui->cluster_size)
+		exfat_set_default_cluster_size(bd, ui);
+
 	if (ioctl(fd, BLKSSZGET, &bd->sector_size) < 0)
 		bd->sector_size = DEFAULT_SECTOR_SIZE;
 	bd->sector_size_bits = sector_size_bits(bd->sector_size);
@@ -483,17 +497,6 @@ static void init_user_input(struct exfat_user_input *ui)
 {
 	memset(ui, 0, sizeof(struct exfat_user_input));
 	ui->quick = true;
-}
-
-static void exfat_set_default_cluster_size(struct exfat_blk_dev *bd,
-		struct exfat_user_input *ui)
-{
-	if (256 * MB >= bd->size)
-		ui->cluster_size = 4 * KB;
-	else if (32 * GB >= bd->size)
-		ui->cluster_size = 32 * KB;
-	else
-		ui->cluster_size = 128 * KB;
 }
 
 static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
@@ -651,9 +654,6 @@ int main(int argc, char *argv[])
 		if (ret)
 			goto out;
 	}
-
-	if (!ui.cluster_size)
-		exfat_set_default_cluster_size(&bd, &ui);
 
 	ret = exfat_build_mkfs_info(&bd, &ui);
 	if (ret)
