@@ -654,5 +654,6 @@ int main(int argc, char *argv[])
 
 	fsync(bd.dev_fd);
 out:
+	close(bd.dev_fd);
 	return ret;
 }
