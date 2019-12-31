@@ -15,7 +15,7 @@
 #define BIT_MASK(nr)            ((1) << ((nr) % 32))
 #define BIT_WORD(nr)            ((nr) / 32)
 
-static inline void set_bit(int nr, volatile unsigned int *addr)
+static inline void set_bit(int nr, unsigned int *addr)
 {
         unsigned long mask = BIT_MASK(nr);
         unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
@@ -23,7 +23,7 @@ static inline void set_bit(int nr, volatile unsigned int *addr)
         *p  |= mask;
 }
 
-static inline void clear_bit(int nr, volatile unsigned int *addr)
+static inline void clear_bit(int nr, unsigned int *addr)
 {
         unsigned long mask = BIT_MASK(nr);
         unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
