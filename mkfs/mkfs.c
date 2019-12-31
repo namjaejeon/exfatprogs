@@ -249,7 +249,7 @@ static int write_fat_entry(int fd, __le32 clu,
 	return 0;
 }
 
-static int write_fat_entris(struct exfat_user_input *ui, int fd,
+static int write_fat_entries(struct exfat_user_input *ui, int fd,
 		unsigned int clu, unsigned int length)
 {
 	int ret;
@@ -295,18 +295,18 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 	}
 
 	/* write bitmap entries */
-	clu = write_fat_entris(ui, bd->dev_fd, EXFAT_FIRST_CLUSTER,
+	clu = write_fat_entries(ui, bd->dev_fd, EXFAT_FIRST_CLUSTER,
 		finfo.bitmap_byte_len);
 	if (clu < 0)
 		return ret;
 
 	/* write upcase table entries */
-	clu = write_fat_entris(ui, bd->dev_fd, clu + 1, finfo.ut_byte_len);
+	clu = write_fat_entries(ui, bd->dev_fd, clu + 1, finfo.ut_byte_len);
 	if (clu < 0)
 		return ret;
 
 	/* write root directory entries */
-	clu = write_fat_entris(ui, bd->dev_fd, clu + 1, finfo.root_byte_len);
+	clu = write_fat_entries(ui, bd->dev_fd, clu + 1, finfo.root_byte_len);
 	if (clu < 0)
 		return ret;
 
