@@ -468,7 +468,7 @@ static void usage(void)
 {
 	fprintf(stderr, "Usage: mkfs.exfat\n");
 	fprintf(stderr, "\t-l=string | --volume-label=string	Set volume label\n");
-	fprintf(stderr, "\t-c=size | --cluster-size=size	Set cluster size\n");
+	fprintf(stderr, "\t-c=KB size | --cluster-size=KB size	Set cluster size\n");
 	fprintf(stderr, "\t-f | --full-format			Full format\n");
 	fprintf(stderr, "\t-V | --version			Show version\n");
 	fprintf(stderr, "\t-v | --verbose			Print debug\n");
@@ -616,7 +616,7 @@ int main(int argc, char *argv[])
 			break;
 		}
 		case 'c':
-			ui.cluster_size = atoi(optarg);
+			ui.cluster_size = atoi(optarg) * KB;
 			if (ui.cluster_size > EXFAT_MAX_CLUSTER_SIZE) {
 				exfat_msg(EXFAT_ERROR,
 					"cluster size(%d) exceeds max cluster size(%d)\n",
