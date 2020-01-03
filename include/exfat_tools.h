@@ -58,10 +58,11 @@ void boot_calc_checksum(unsigned char *sector, unsigned short size,
  * Exfat Print
  */
 
-static unsigned int print_level;
+static unsigned int print_level = 1;
 
 #define EXFAT_ERROR	(0)
-#define EXFAT_DEBUG	(1)
+#define EXFAT_INFO	(1)
+#define EXFAT_DEBUG	(2)
 
 #define exfat_msg(level, fmt, ...)					\
 	do {								\
