@@ -231,8 +231,6 @@ static int exfat_create_volume_boot_record(struct exfat_blk_dev *bd,
 	unsigned int checksum = 0;
 	int ret;
 
-	exfat_msg(EXFAT_DEBUG, "Create Volume Boot Record\n");
-
 	ret = exfat_write_boot_sector(bd, ui, &checksum, is_backup);
 	if (ret)
 		return ret;
@@ -290,8 +288,6 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 {
 	int ret, clu, count;
 
-	exfat_msg(EXFAT_DEBUG, "Create FAT Table\n");
-
 	/* fat entry 0 should be media type field(0xF8) */
 	ret = write_fat_entry(bd->dev_fd, cpu_to_le32(0xfffffff8), 0);
 	if (ret) {
@@ -337,8 +333,6 @@ static int exfat_create_bitmap(struct exfat_blk_dev *bd,
 	char *bitmap;
 	int i, nbytes;
 
-	exfat_msg(EXFAT_DEBUG, "Create Allocation Bitmap\n");
-
 	bitmap = malloc(finfo.bitmap_byte_len);
 	if (!bitmap)
 		return -1;
@@ -364,8 +358,6 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 	struct exfat_dentry ed[3];
 	int dentries_len = sizeof(struct exfat_dentry) * 3;
 	int nbytes, vol_len;
-
-	exfat_msg(EXFAT_DEBUG, "Create Root Directory entry\n");
 
 	/* Set volume label entry */
 	ed[0].type = EXFAT_VOLUME;
@@ -572,6 +564,56 @@ static int exfat_zero_out_disk(struct exfat_blk_dev *bd,
 	return 0;
 }
 
+static int make_exfat(struct exfat_blk_dev *bd, struct exfat_user_input *ui)
+{
+	int ret;
+
+	exfat_msg(EXFAT_INFO,
+		"Creating exFAT filesystem(%s) with %u cluster size\n\n",
+		ui->dev_name, ui->cluster_size);
+
+	exfat_msg(EXFAT_INFO, "Writing volume boot record: ");
+	ret = exfat_create_volume_boot_record(bd, ui, 0);
+	exfat_msg(EXFAT_INFO, "%s\n", ret ? "failed" : "done");
+	if (ret)
+		return ret;
+
+	exfat_msg(EXFAT_INFO, "Writing backup volume boot record: ");
+	/* backup sector */
+	ret = exfat_create_volume_boot_record(bd, ui, 1);
+	exfat_msg(EXFAT_INFO, "%s\n", ret ? "failed" : "done");
+	if (ret)
+		return ret;
+
+	exfat_msg(EXFAT_INFO, "Fat table creation: ");
+	ret = exfat_create_fat_table(bd, ui);
+	exfat_msg(EXFAT_INFO, "%s\n", ret ? "failed" : "done");
+	if (ret)
+		return ret;
+
+	exfat_msg(EXFAT_INFO, "Allocation bitmap creation: ");
+	ret = exfat_create_bitmap(bd, ui);
+	exfat_msg(EXFAT_INFO, "%s\n", ret ? "failed" : "done");
+	if (ret)
+		return ret;
+
+	exfat_msg(EXFAT_INFO, "Upcate table creation: ");
+	ret = exfat_create_upcase_table(bd, ui);
+	exfat_msg(EXFAT_INFO, "%s\n", ret ? "failed" : "done");
+	if (ret)
+		return ret;
+
+	exfat_msg(EXFAT_INFO, "Writing root directory entry: ");
+	ret = exfat_create_root_dir(bd, ui);
+	exfat_msg(EXFAT_INFO, "%s\n", ret ? "failed" : "done");
+	if (ret)
+		return ret;
+
+	exfat_msg(EXFAT_INFO, "\nexFAT format complete!\n");
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	int c;
@@ -652,6 +694,7 @@ int main(int argc, char *argv[])
 	memset(ui.dev_name, 0, 255);
 	strncpy(ui.dev_name, argv[optind], 255);
 
+	printf("exfat-tools version : %s\n", EXFAT_TOOLS_VERSION);
 	ret = exfat_get_blk_dev_info(&ui, &bd);
 	if (ret < 0)
 		goto out;
@@ -664,28 +707,9 @@ int main(int argc, char *argv[])
 	if (ret)
 		goto out;
 
-	ret = exfat_create_volume_boot_record(&bd, &ui, 0);
+	ret = make_exfat(&bd, &ui);
 	if (ret)
 		goto out;
-
-	/* backup sector */
-	ret = exfat_create_volume_boot_record(&bd, &ui, 1);
-	if (ret)
-		goto out;
-
-	ret = exfat_create_fat_table(&bd, &ui);
-	if (ret)
-		goto out;
-
-	ret = exfat_create_bitmap(&bd, &ui);
-	if (ret)
-		goto out;
-
-	ret = exfat_create_upcase_table(&bd, &ui);
-	if (ret)
-		goto out;
-
-	ret = exfat_create_root_dir(&bd, &ui);
 
 	fsync(bd.dev_fd);
 out:

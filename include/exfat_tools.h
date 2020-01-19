@@ -64,12 +64,15 @@ static unsigned int print_level = 1;
 #define EXFAT_INFO	(1)
 #define EXFAT_DEBUG	(2)
 
-#define exfat_msg(level, fmt, ...)					\
-	do {								\
-		if (print_level >= level) {				\
-			printf("[%s:%4d] " fmt,				\
-				__func__, __LINE__, ##__VA_ARGS__);	\
-		}							\
-	} while (0)							\
+#define exfat_msg(level, fmt, ...)						\
+	do {									\
+		if (print_level >= level) {					\
+			if (print_level == EXFAT_INFO)				\
+				printf(fmt, ##__VA_ARGS__);		\
+			else							\
+				printf("[%s:%4d] " fmt,				\
+					__func__, __LINE__, ##__VA_ARGS__);	\
+		}								\
+	} while (0)								\
 
 #endif /* !_EXFA_TOOLS_H */
