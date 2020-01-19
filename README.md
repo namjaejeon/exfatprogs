@@ -3,19 +3,15 @@
 Exfat-tools is mkfs(format)/fsck(repair) implementation for exfat filesystem under GNU GPL version 2. This opensource project was created by Namjae Jeon as exfat is officially supported in Linux kernel.
 
 ## Maintainers
-
 * Namjae Jeon <linkinjeon@gmail.com>
 * Hyunchul Lee <hyc.lee@gmail.com>
 
-## building exfat tools
-
+## Buidling exfat tools
 Install preprequisite packages:
 ```
 	For Ubuntu:
 	sudo apt-get install autoconf libtool pkg-config
-```
 
-```
 	For Fedora, RHEL:
 	sudo yum install autoconf automake libtool
 ```
@@ -29,7 +25,7 @@ Build steps:
         make install
 ```
 
-## USING exFAT TOOLS
+## Using exFAT tools
 ```
 - mkfs.exfat:
 	Build a exfat filesystem on a device or partition(e.g. /dev/hda1, dev/sda1).
