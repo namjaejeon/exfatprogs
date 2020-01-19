@@ -534,12 +534,19 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	return 0;
 }
 
-static int exfat_zero_out_disk(struct exfat_blk_dev *bd)
+static int exfat_zero_out_disk(struct exfat_blk_dev *bd,
+		struct exfat_user_input *ui)
 {
 	int nbytes;
-	int chunk_size = 128 * 1024;
 	unsigned long long total_written = 0;
 	char *buf;
+	unsigned int chunk_size = ui->cluster_size;
+	unsigned long long size;
+
+	if (ui->quick)
+		size = finfo.root_byte_off + chunk_size;
+	else
+		size = bd->size;
 
 	buf = malloc(chunk_size);
 	if (!buf)
@@ -557,7 +564,7 @@ static int exfat_zero_out_disk(struct exfat_blk_dev *bd)
 			break;
 		}
 		total_written += nbytes;
-	} while (total_written <= bd->size);
+	} while (total_written <= size);
 
 	exfat_msg(EXFAT_DEBUG,
 		"zero out written size : %llu, disk size : %llu\n",
@@ -649,13 +656,11 @@ int main(int argc, char *argv[])
 	if (ret < 0)
 		goto out;
 
-	if (ui.quick == false) {
-		ret = exfat_zero_out_disk(&bd);
-		if (ret)
-			goto out;
-	}
-
 	ret = exfat_build_mkfs_info(&bd, &ui);
+	if (ret)
+		goto out;
+
+	ret = exfat_zero_out_disk(&bd, &ui);
 	if (ret)
 		goto out;
 
