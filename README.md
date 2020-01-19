@@ -10,21 +10,27 @@ Exfat-tools is mkfs(format)/fsck(repair) implementation for exfat filesystem und
 ## building exfat tools
 
 Install preprequisite packages:
+```
 	For Ubuntu:
 	sudo apt-get install autoconf libtool pkg-config
+```
 
+```
 	For Fedora, RHEL:
 	sudo yum install autoconf automake libtool
+```
 
 Build steps:
-        - cd into the exfat-tools directory
-        - ./autogen.sh
-        - ./configure
-        - make
-        - make install
+```
+        cd into the exfat-tools directory
+        ./autogen.sh
+        ./configure
+        make
+        make install
+```
 
 ## USING exFAT TOOLS
-
+```
 - mkfs.exfat:
 	Build a exfat filesystem on a device or partition(e.g. /dev/hda1, dev/sda1).
 
@@ -38,3 +44,4 @@ Usage example:
 
 - fsck.exfat(Preparing):
 	Check the consistency of your exfat filesystem and optinally repair a corrupted device formatted by exfat.
+```
