@@ -1,6 +1,6 @@
 
 ## exfat-tools ?
-Exfat-tools is mkfs(format)/fsck(repair) implementation for exfat filesystem under GNU GPL version 2. This opensource project was created by Namjae Jeon as exfat is officially supported in Linux kernel.
+Exfat-tools is mkfs(format)/fsck(repair) implementation for exfat filesystem under GNU GPL version 2.
 
 ## Maintainers
 * Namjae Jeon <linkinjeon@gmail.com>
