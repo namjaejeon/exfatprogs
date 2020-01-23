@@ -267,8 +267,7 @@ static int write_fat_entries(struct exfat_user_input *ui, int fd,
 	int ret;
 	unsigned int count;
 
-	count = clu + round_up(finfo.bitmap_byte_len, ui->cluster_size) /
-		ui->cluster_size;
+	count = clu + round_up(length, ui->cluster_size) / ui->cluster_size;
 
 	for (; clu < count - 1; clu++) {
 		ret = write_fat_entry(fd, cpu_to_le32(clu + 1), clu);
