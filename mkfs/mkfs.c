@@ -609,8 +609,6 @@ static int make_exfat(struct exfat_blk_dev *bd, struct exfat_user_input *ui)
 	if (ret)
 		return ret;
 
-	exfat_msg(EXFAT_INFO, "\nexFAT format complete!\n");
-
 	return 0;
 }
 
@@ -711,8 +709,12 @@ int main(int argc, char *argv[])
 	if (ret)
 		goto out;
 
-	fsync(bd.dev_fd);
+	exfat_msg(EXFAT_INFO, "\nSynchronizing... \n");
+	ret = fsync(bd.dev_fd);
+	exfat_msg(EXFAT_INFO, "\nexFAT format complete!\n");
 out:
+	if (ret)
+		exfat_msg(EXFAT_INFO, "\nexFAT format fail!\n");
 	close(bd.dev_fd);
 	return ret;
 }
