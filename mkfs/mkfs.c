@@ -267,8 +267,7 @@ static int write_fat_entries(struct exfat_user_input *ui, int fd,
 	int ret;
 	unsigned int count;
 
-	count = clu + round_up(finfo.bitmap_byte_len, ui->cluster_size) /
-		ui->cluster_size;
+	count = clu + round_up(length, ui->cluster_size) / ui->cluster_size;
 
 	for (; clu < count - 1; clu++) {
 		ret = write_fat_entry(fd, cpu_to_le32(clu + 1), clu);
@@ -609,8 +608,6 @@ static int make_exfat(struct exfat_blk_dev *bd, struct exfat_user_input *ui)
 	if (ret)
 		return ret;
 
-	exfat_msg(EXFAT_INFO, "\nexFAT format complete!\n");
-
 	return 0;
 }
 
@@ -711,8 +708,13 @@ int main(int argc, char *argv[])
 	if (ret)
 		goto out;
 
-	fsync(bd.dev_fd);
+	exfat_msg(EXFAT_INFO, "Synchronizing... \n");
+	ret = fsync(bd.dev_fd);
 out:
+	if (!ret)
+		exfat_msg(EXFAT_INFO, "\nexFAT format complete!\n");
+	else
+		exfat_msg(EXFAT_INFO, "\nexFAT format fail!\n");
 	close(bd.dev_fd);
 	return ret;
 }
