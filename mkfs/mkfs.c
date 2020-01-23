@@ -709,11 +709,12 @@ int main(int argc, char *argv[])
 	if (ret)
 		goto out;
 
-	exfat_msg(EXFAT_INFO, "\nSynchronizing... \n");
+	exfat_msg(EXFAT_INFO, "Synchronizing... \n");
 	ret = fsync(bd.dev_fd);
-	exfat_msg(EXFAT_INFO, "\nexFAT format complete!\n");
 out:
-	if (ret)
+	if (!ret)
+		exfat_msg(EXFAT_INFO, "\nexFAT format complete!\n");
+	else
 		exfat_msg(EXFAT_INFO, "\nexFAT format fail!\n");
 	close(bd.dev_fd);
 	return ret;
