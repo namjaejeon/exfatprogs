@@ -265,6 +265,21 @@ err:
 	return false;
 }
 
+void exfat_show_info(struct exfat *exfat)
+{
+	exfat_info("volume label [%s]\n",
+			exfat->volume_label);
+	exfat_info("Bytes per sector: %d\n",
+			1 << le32_to_cpu(exfat->bs->bsx.sect_size_bits));
+	exfat_info("Sectors per cluster: %d\n",
+			1 << le32_to_cpu(exfat->bs->bsx.sect_per_clus_bits));
+	exfat_info("Cluster heap count: %d(0x%x)\n",
+			le32_to_cpu(exfat->bs->bsx.clu_count),
+			le32_to_cpu(exfat->bs->bsx.clu_count));
+	exfat_info("Cluster heap offset: %#x\n",
+			le32_to_cpu(exfat->bs->bsx.clu_offset));
+}
+
 void exfat_show_stat(struct exfat *exfat)
 {
 	exfat_debug("Found directories: %ld\n", exfat_stat.dir_count);
@@ -326,6 +341,8 @@ int main(int argc, char * const argv[])
 		exfat_err("failed to verify boot regions.\n");
 		goto err;
 	}
+
+	exfat_show_info(exfat);
 
 	exfat_show_stat(exfat);
 err:
