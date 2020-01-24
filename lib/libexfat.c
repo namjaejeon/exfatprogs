@@ -81,16 +81,22 @@ wchar_t exfat_bad_char(wchar_t w)
 }
 
 void boot_calc_checksum(unsigned char *sector, unsigned short size,
-		bool is_boot_sec, unsigned int *checksum)
+		bool is_boot_sec, __le32 *checksum)
 {
 	unsigned int index;
 
-	for (index = 0; index < size; index++) {
-		if (is_boot_sec == true &&
-		    ((index == 106) || (index == 107) || (index == 112)))
-			continue;
-		*checksum = ((*checksum & 1) ? 0x80000000 : 0) +
-			(*checksum >> 1) + sector[index];
+	if (is_boot_sec) {
+		for (index = 0; index < size; index++) {
+			if ((index == 106) || (index == 107) || (index == 112))
+				continue;
+			*checksum = ((*checksum & 1) ? 0x80000000 : 0) +
+				(*checksum >> 1) + sector[index];
+		}
+	} else {
+		for (index = 0; index < size; index++) {
+			*checksum = ((*checksum & 1) ? 0x80000000 : 0) +
+				(*checksum >> 1) + sector[index];
+		}
 	}
 }
 
@@ -157,7 +163,7 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 	exfat_msg(EXFAT_DEBUG, "Block device name : %s\n", ui->dev_name);
 	exfat_msg(EXFAT_DEBUG, "Block device size : %lld\n", bd->size);
 	exfat_msg(EXFAT_DEBUG, "Block sector size : %u\n", bd->sector_size);
-	exfat_msg(EXFAT_DEBUG, "Number of the sectors : %u\n",
+	exfat_msg(EXFAT_DEBUG, "Number of the sectors : %llu\n",
 		bd->num_sectors);
 	exfat_msg(EXFAT_DEBUG, "Number of the clusters : %u\n",
 		bd->num_clusters);
@@ -166,4 +172,9 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 	bd->dev_fd = fd;
 out:
 	return ret;
+}
+
+ssize_t exfat_read(int fd, void *buf, size_t size, off_t offset)
+{
+	return pread(fd, buf, size, offset);
 }

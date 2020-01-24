@@ -15,6 +15,10 @@
 #include "exfat_tools.h"
 #include "list.h"
 
+#define EXFAT_CLUSTER_SIZE(pbr) (1 << ((pbr)->bsx.sect_size_bits +	\
+					(pbr)->bsx.sect_per_clus_bits))
+#define EXFAT_SECTOR_SIZE(pbr) (1 << (pbr)->bsx.sect_size_bits)
+
 enum fsck_ui_options {
 	FSCK_OPTS_REPAIR	= 0x01,
 };
@@ -138,9 +142,127 @@ static struct exfat *alloc_exfat(struct exfat_blk_dev *bd)
 static void free_exfat(struct exfat *exfat)
 {
 	if (exfat) {
-		free(exfat->bs);
+		if (exfat->bs)
+			free(exfat->bs);
 		free(exfat);
 	}
+}
+
+static int boot_region_checksum(struct exfat *exfat)
+{
+	__le32 checksum;
+	unsigned short size;
+	void *sect;
+	int i;
+
+	size = EXFAT_SECTOR_SIZE(exfat->bs);
+	sect = malloc(size);
+	if (!sect)
+		return -ENOMEM;
+
+	checksum = 0;
+
+	boot_calc_checksum((unsigned char *)exfat->bs, size, true, &checksum);
+	for (i = 1; i < 11; i++) {
+		if (exfat_read(exfat->blk_dev->dev_fd, sect, size, i * size) !=
+				(ssize_t)size) {
+			free(sect);
+			return -EIO;
+		}
+		boot_calc_checksum(sect, size, false, &checksum);
+	}
+
+	if (exfat_read(exfat->blk_dev->dev_fd, sect, size, i * size) !=
+			(ssize_t)size) {
+		free(sect);
+		return -EIO;
+	}
+	for (i = 0; i < size/sizeof(checksum); i++) {
+		if (le32_to_cpu(((__le32 *)sect)[i]) != checksum) {
+			exfat_err("invalid checksum. 0x%x\n",
+					le32_to_cpu(((__le32 *)sect)[i]));
+			free(sect);
+			return -EIO;
+		}
+	}
+
+	free(sect);
+	return 0;
+}
+
+static bool exfat_boot_region_check(struct exfat *exfat)
+{
+	struct pbr *bs;
+	ssize_t ret;
+
+	bs = (struct pbr *)malloc(sizeof(struct pbr));
+	if (!bs) {
+		exfat_err("failed to allocate memory\n");
+		return false;
+	}
+
+	exfat->bs = bs;
+
+	ret = exfat_read(exfat->blk_dev->dev_fd, bs, sizeof(*bs), 0);
+	if (ret != sizeof(*bs)) {
+		exfat_err("failed to read a boot sector. %ld\n", ret);
+		goto err;
+	}
+
+	if (memcmp(bs->bpb.oem_name, "EXFAT   ", 8) != 0) {
+		exfat_err("failed to find exfat file system.\n");
+		goto err;
+	}
+
+	if (EXFAT_SECTOR_SIZE(bs) < 512) {
+		exfat_err("too small sector size: %d\n", EXFAT_SECTOR_SIZE(bs));
+		goto err;
+	}
+
+	if (EXFAT_CLUSTER_SIZE(bs) > 32U * 1024 * 1024) {
+		exfat_err("too big cluster size: %d\n", EXFAT_CLUSTER_SIZE(bs));
+		goto err;
+	}
+
+	ret = boot_region_checksum(exfat);
+	if (ret) {
+		exfat_err("failed to verify the checksum of a boot region. %ld\n",
+			ret);
+		goto err;
+	}
+
+	if (bs->bsx.fs_version[1] != 1 || bs->bsx.fs_version[0] != 0) {
+		exfat_err("unsupported exfat version: %d.%d\n",
+				bs->bsx.fs_version[1], bs->bsx.fs_version[0]);
+		goto err;
+	}
+
+	if (bs->bsx.num_fats != 1) {
+		exfat_err("unsupported FAT count: %d\n", bs->bsx.num_fats);
+		goto err;
+	}
+
+	if (le64_to_cpu(bs->bsx.vol_length) * EXFAT_SECTOR_SIZE(bs) >
+			exfat->blk_dev->size) {
+		exfat_err("too large sector count: %llu\n, expected: %llu\n",
+				le64_to_cpu(bs->bsx.vol_length),
+				exfat->blk_dev->num_sectors);
+		goto err;
+	}
+
+	if (le32_to_cpu(bs->bsx.clu_count) * EXFAT_CLUSTER_SIZE(bs) >
+			exfat->blk_dev->size) {
+		exfat_err("too large cluster count: %u, expected: %u\n",
+				le32_to_cpu(bs->bsx.clu_count),
+				exfat->blk_dev->num_clusters);
+		goto err;
+	}
+
+	return true;
+err:
+	free(bs);
+	exfat->bs = NULL;
+	return false;
 }
 
 void exfat_show_stat(struct exfat *exfat)
@@ -196,6 +318,12 @@ int main(int argc, char * const argv[])
 	exfat = alloc_exfat(&bd);
 	if (!exfat) {
 		ret = -ENOMEM;
+		goto err;
+	}
+
+	exfat_debug("verifying boot regions...\n");
+	if (!exfat_boot_region_check(exfat)) {
+		exfat_err("failed to verify boot regions.\n");
 		goto err;
 	}
 
