@@ -9,9 +9,11 @@
 #include <stdio.h>
 #include <getopt.h>
 #include <string.h>
+#include <errno.h>
 
 #include "exfat_ondisk.h"
 #include "exfat_tools.h"
+#include "list.h"
 
 enum fsck_ui_options {
 	FSCK_OPTS_REPAIR	= 0x01,
@@ -20,6 +22,40 @@ enum fsck_ui_options {
 struct fsck_user_input {
 	struct exfat_user_input		ei;
 	enum fsck_ui_options		options;
+};
+
+typedef __u32 clus_t;
+
+enum exfat_file_attr {
+	EXFAT_FA_NONE		= 0x00,
+	EXFAT_FA_DIR		= 0x01,
+};
+
+struct exfat_node {
+	struct exfat_node	*parent;
+	struct list_head	children;
+	struct list_head	sibling;
+	struct list_head	list;
+	clus_t			first_clus;
+	__u16			attr;
+	__u64			size;
+	bool			is_contiguous;
+	off_t			dentry_file_offset;
+	__le16			name[0];	/* only for directory */
+};
+
+#define EXFAT_NAME_MAX		255
+#define UTF16_NAME_BUFFER_SIZE	((EXFAT_NAME_MAX + 1) * sizeof(__le16))
+#define UTF8_NAME_BUFFER_SIZE	(EXFAT_NAME_MAX * 3 + 1)
+
+struct exfat {
+	struct exfat_blk_dev	*blk_dev;
+	struct pbr		*bs;
+	char			volume_label[VOLUME_LABEL_MAX_LEN*3+1];
+	struct exfat_node	*root;
+	struct list_head	dir_list;
+	__u32			*alloc_bitmap;
+	__u64			bit_count;
 };
 
 static struct option opts[] = {
@@ -41,11 +77,61 @@ static void usage(char *name)
 	exit(EXIT_FAILURE);
 }
 
+static struct exfat_node *alloc_exfat_node(__u16 attr)
+{
+	struct exfat_node *node;
+	int size;
+
+	size = offsetof(struct exfat_node, name) + UTF16_NAME_BUFFER_SIZE;
+	node = (struct exfat_node *)calloc(1, size);
+	if (!node) {
+		exfat_err("failed to allocate exfat_node\n");
+		return NULL;
+	}
+
+	node->parent = NULL;
+	INIT_LIST_HEAD(&node->children);
+	INIT_LIST_HEAD(&node->sibling);
+	INIT_LIST_HEAD(&node->list);
+
+	node->attr = attr;
+	return node;
+}
+
+static void free_exfat_node(struct exfat_node *node)
+{
+	free(node);
+}
+
+static struct exfat *alloc_exfat(struct exfat_blk_dev *bd)
+{
+	struct exfat *exfat;
+
+	exfat = (struct exfat *)calloc(1, sizeof(*exfat));
+	if (!exfat) {
+		exfat_err("failed to allocate exfat\n");
+		return NULL;
+	}
+
+	exfat->blk_dev = bd;
+	INIT_LIST_HEAD(&exfat->dir_list);
+	return exfat;
+}
+
+static void free_exfat(struct exfat *exfat)
+{
+	if (exfat) {
+		free(exfat->bs);
+		free(exfat);
+	}
+}
+
 int main(int argc, char * const argv[])
 {
 	int c, ret;
 	struct fsck_user_input ui = {0,};
 	struct exfat_blk_dev bd = {0,};
+	struct exfat *exfat = NULL;
 
 	opterr = 0;
 	while ((c = getopt_long(argc, argv, "Vvh", opts, NULL)) != EOF) {
@@ -80,6 +166,14 @@ int main(int argc, char * const argv[])
 		return ret;
 	}
 
+	exfat = alloc_exfat(&bd);
+	if (!exfat) {
+		ret = -ENOMEM;
+		goto err;
+	}
+
+err:
+	free_exfat(exfat);
 	close(bd.dev_fd);
 	return ret;
 }
