@@ -60,6 +60,12 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 		struct exfat_blk_dev *bd);
 ssize_t exfat_read(int fd, void *buf, size_t size, off_t offset);
 
+int utf16_to_utf8(char *output, const __le16 *input, size_t outsize,
+		size_t insize);
+int utf8_to_utf16(__le16 *output, const char *input, size_t outsize,
+		size_t insize);
+size_t utf16_length(const __le16 *str);
+
 /*
  * Exfat Print
  */

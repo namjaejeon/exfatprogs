@@ -2,4 +2,4 @@ AM_CFLAGS = -I$(top_srcdir)/include -fno-common
 
 lib_LTLIBRARIES = libexfat.la
 
-libexfat_la_SOURCES = libexfat.c
+libexfat_la_SOURCES = libexfat.c utf.c

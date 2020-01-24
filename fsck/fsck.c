@@ -69,7 +69,14 @@ struct exfat_stat {
 	long		file_free_count;
 };
 
+struct path_resolve_ctx {
+	struct exfat_node	*ancestors[255];
+	__le16			utf16_path[sizeof(__le16) * (PATH_MAX + 2)];
+	char			utf8_path[PATH_MAX * 3 + 1];
+};
+
 struct exfat_stat exfat_stat;
+struct path_resolve_ctx path_resolve_ctx;
 
 static struct option opts[] = {
 	{"version",	no_argument,	NULL,	'V' },
@@ -321,6 +328,91 @@ err:
 	return false;
 }
 
+/*
+ * get references of ancestors that include @child until the count of
+ * ancesters is not larger than @count and the count of characters of
+ * their names is not larger than @max_char_len.
+ * return true if root is reached.
+ */
+bool get_ancestors(struct exfat_node *child,
+		struct exfat_node **ancestors, int count,
+		int max_char_len,
+		int *ancestor_count)
+{
+	struct exfat_node *dir;
+	int name_len, char_len;
+	int root_depth, depth, i;
+
+	root_depth = 0;
+	char_len = 0;
+	max_char_len += 1;
+
+	dir = child;
+	while (dir) {
+		name_len = utf16_length(dir->name);
+		if (char_len + name_len > max_char_len)
+			break;
+
+		/* include '/' */
+		char_len += name_len + 1;
+		root_depth++;
+
+		dir = dir->parent;
+	}
+
+	depth = MIN(root_depth, count);
+
+	for (dir = child, i = depth - 1; i >= 0; dir = dir->parent, i--)
+		ancestors[i] = dir;
+
+	*ancestor_count = depth;
+	return dir == NULL;
+}
+
+static int resolve_path(struct path_resolve_ctx *ctx,
+						struct exfat_node *child)
+{
+	int ret = 0;
+	int depth, i;
+	int name_len, path_len;
+	__le16 *utf16_path;
+
+	ctx->utf8_path[0] = '\0';
+
+	get_ancestors(child,
+			ctx->ancestors,
+			sizeof(ctx->ancestors) / sizeof(ctx->ancestors[0]),
+			PATH_MAX,
+			&depth);
+
+	utf16_path = ctx->utf16_path;
+	for (i = 0; i < depth; i++) {
+		name_len = utf16_length(ctx->ancestors[i]->name);
+		memcpy((char *)utf16_path, (char *)ctx->ancestors[i]->name,
+				name_len * 2);
+		utf16_path += name_len;
+		memcpy((char *)utf16_path, u"/", 2);
+		utf16_path += 1;
+	}
+
+	ret = utf16_to_utf8(ctx->utf8_path, ctx->utf16_path,
+		sizeof(ctx->utf8_path), utf16_path - ctx->utf16_path - 1);
+	return ret;
+}
+
+static int resolve_path_parent(struct path_resolve_ctx *ctx,
+			struct exfat_node *parent, struct exfat_node *child)
+{
+	int ret;
+	struct exfat_node *old;
+
+	old = child->parent;
+	child->parent = parent;
+
+	ret = resolve_path(ctx, child);
+	child->parent = old;
+	return ret;
+}
 static bool exfat_root_dir_check(struct exfat *exfat)
 {
 	struct exfat_node *root;
