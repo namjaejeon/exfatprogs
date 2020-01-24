@@ -148,6 +148,62 @@ static void free_exfat(struct exfat *exfat)
 	}
 }
 
+static inline bool exfat_invalid_clus(struct exfat *exfat, clus_t clus)
+{
+	return clus < EXFAT_FIRST_CLUSTER ||
+	(clus - EXFAT_FIRST_CLUSTER) > le32_to_cpu(exfat->bs->bsx.clu_count);
+}
+
+static int node_get_clus_next(struct exfat *exfat, struct exfat_node *node,
+				clus_t clus, clus_t *next)
+{
+	off_t offset;
+
+	if (exfat_invalid_clus(exfat, clus))
+		return -EINVAL;
+
+	if (node->is_contiguous) {
+		*next = clus + 1;
+		return 0;
+	}
+
+	offset = le32_to_cpu(exfat->bs->bsx.fat_offset) <<
+				exfat->bs->bsx.sect_size_bits;
+	offset += sizeof(clus_t) * clus;
+
+	if (exfat_read(exfat->blk_dev->dev_fd, next, sizeof(*next), offset)
+			!= sizeof(*next))
+		return -EIO;
+	*next = le32_to_cpu(*next);
+	return 0;
+}
+
+static bool node_get_clus_count(struct exfat *exfat, struct exfat_node *node,
+							clus_t *clus_count)
+{
+	clus_t clus;
+
+	clus = node->first_clus;
+	*clus_count = 0;
+
+	do {
+		if (exfat_invalid_clus(exfat, clus)) {
+			exfat_err("bad cluster. 0x%x\n", clus);
+			return false;
+		}
+
+		if (node_get_clus_next(exfat, node, clus, &clus) != 0) {
+			exfat_err(
+				"broken cluster chain. (previous cluster 0x%x)\n",
+				clus);
+			return false;
+		}
+
+		(*clus_count)++;
+	} while (clus != EXFAT_EOF_CLUSTER);
+	return true;
+}
+
 static int boot_region_checksum(struct exfat *exfat)
 {
 	__le32 checksum;
@@ -265,6 +321,36 @@ err:
 	return false;
 }
 
+static bool exfat_root_dir_check(struct exfat *exfat)
+{
+	struct exfat_node *root;
+	int ret;
+	clus_t clus_count;
+
+	root = alloc_exfat_node(ATTR_SUBDIR);
+	if (!root) {
+		exfat_err("failed to allocate memory\n");
+		return false;
+	}
+
+	root->first_clus = le32_to_cpu(exfat->bs->bsx.root_cluster);
+	if (!node_get_clus_count(exfat, root, &clus_count)) {
+		exfat_err("failed to follow the cluster chain of root. %d\n",
+			ret);
+		goto err;
+	}
+	root->size = clus_count * EXFAT_CLUSTER_SIZE(exfat->bs);
+
+	exfat->root = root;
+	exfat_debug("root directory: start cluster[0x%x] size[0x%llx]\n",
+		root->first_clus, root->size);
+	return true;
+err:
+	free_exfat_node(root);
+	exfat->root = NULL;
+	return false;
+}
+
 void exfat_show_info(struct exfat *exfat)
 {
 	exfat_info("volume label [%s]\n",
@@ -344,6 +430,13 @@ int main(int argc, char * const argv[])
 
 	exfat_show_info(exfat);
 
+	exfat_debug("verifying root directory...\n");
+	if (!exfat_root_dir_check(exfat)) {
+		exfat_err("failed to verify root directory.\n");
+		goto out;
+	}
+
+out:
 	exfat_show_stat(exfat);
 err:
 	free_exfat(exfat);
