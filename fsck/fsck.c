@@ -52,12 +52,23 @@ struct exfat_node {
 #define UTF16_NAME_BUFFER_SIZE	((EXFAT_NAME_MAX + 1) * sizeof(__le16))
 #define UTF8_NAME_BUFFER_SIZE	(EXFAT_NAME_MAX * 3 + 1)
 
+struct exfat_de_iter {
+	struct exfat		*exfat;
+	struct exfat_node	*parent;
+	unsigned char		*dentries;	/* cluster * 2 allocated */
+	unsigned int		read_size;	/* cluster size */
+	off_t			de_file_offset;	/* offset in dentries buffer */
+	off_t			next_read_offset;
+	int			max_skip_dentries;
+};
+
 struct exfat {
 	struct exfat_blk_dev	*blk_dev;
 	struct pbr		*bs;
 	char			volume_label[VOLUME_LABEL_MAX_LEN*3+1];
 	struct exfat_node	*root;
 	struct list_head	dir_list;
+	struct exfat_de_iter	de_iter;
 	__u32			*alloc_bitmap;
 	__u64			bit_count;
 };
@@ -271,6 +282,74 @@ static bool node_get_clus_count(struct exfat *exfat, struct exfat_node *node,
 	return true;
 }
 
+static off_t exfat_s2o(struct exfat *exfat, off_t sect)
+{
+	return sect << exfat->bs->bsx.sect_size_bits;
+}
+
+static off_t exfat_c2o(struct exfat *exfat, unsigned int clus)
+{
+	if (clus < EXFAT_FIRST_CLUSTER)
+		return ~0ULL;
+
+	return exfat_s2o(exfat, le32_to_cpu(exfat->bs->bsx.clu_offset) +
+				((clus - EXFAT_FIRST_CLUSTER) <<
+				 exfat->bs->bsx.sect_per_clus_bits));
+}
+
+ssize_t exfat_file_read(struct exfat *exfat, struct exfat_node *node,
+			void *buf, size_t total_size, off_t file_offset)
+{
+	size_t clus_size;
+	clus_t start_l_clus, l_clus, p_clus;
+	unsigned int clus_offset;
+	int ret;
+	off_t device_offset;
+	ssize_t read_size;
+	size_t remain_size;
+
+	if (file_offset >= node->size)
+		return EOF;
+
+	clus_size = EXFAT_CLUSTER_SIZE(exfat->bs);
+	total_size = MIN(total_size, node->size - file_offset);
+	remain_size = total_size;
+
+	if (remain_size == 0)
+		return 0;
+
+	p_clus = node->first_clus;
+	clus_offset = file_offset % clus_size;
+	start_l_clus = file_offset / clus_size;
+	l_clus = 0;
+
+	while (p_clus != EXFAT_EOF_CLUSTER) {
+		if (exfat_invalid_clus(exfat, p_clus))
+			return -EINVAL;
+		if (l_clus < start_l_clus)
+			goto next_clus;
+
+		read_size = MIN(remain_size, clus_size - clus_offset);
+		device_offset = exfat_c2o(exfat, p_clus) + clus_offset;
+		if (exfat_read(exfat->blk_dev->dev_fd, buf, read_size,
+					device_offset) != read_size)
+			return -EIO;
+
+		clus_offset = 0;
+		buf += read_size;
+		remain_size -= read_size;
+		if (remain_size == 0)
+			return total_size;
+
+next_clus:
+		l_clus++;
+		ret = node_get_clus_next(exfat, node, p_clus, &p_clus);
+		if (ret)
+			return ret;
+	}
+	return total_size - remain_size;
+}
+
 static int boot_region_checksum(struct exfat *exfat)
 {
 	__le32 checksum;
@@ -474,9 +553,169 @@ static int resolve_path_parent(struct path_resolve_ctx *ctx,
 	return ret;
 }
 
+int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
+						struct exfat_node *dir)
+{
+	ssize_t ret;
+
+	if (!iter->dentries) {
+		iter->read_size = EXFAT_CLUSTER_SIZE(exfat->bs);
+		iter->dentries = malloc(iter->read_size * 2);
+		if (!iter->dentries) {
+			exfat_err("failed to allocate memory\n");
+			return -ENOMEM;
+		}
+	}
+
+	ret = exfat_file_read(exfat, dir, iter->dentries, iter->read_size, 0);
+	if (ret != iter->read_size) {
+		exfat_err("failed to read directory entries.\n");
+		return -EIO;
+	}
+
+	iter->exfat = exfat;
+	iter->parent = dir;
+	iter->de_file_offset = 0;
+	iter->next_read_offset = iter->read_size;
+	iter->max_skip_dentries = 0;
+	return 0;
+}
+
+void exfat_de_iter_fini(struct exfat_de_iter *iter)
+{
+	free(iter->dentries);
+}
+
+int exfat_de_iter_get(struct exfat_de_iter *iter,
+					int ith, struct exfat_dentry **dentry)
+{
+	off_t de_next_file_offset;
+	int de_offset, de_next_offset;
+	bool need_read_1_clus = false, need_read_2_clus = false;
+	int ret;
+
+	de_next_file_offset = iter->de_file_offset +
+			ith * sizeof(struct exfat_dentry);
+
+	if (de_next_file_offset + sizeof(struct exfat_dentry) >
+		round_down(iter->parent->size, sizeof(struct exfat_dentry)))
+		return EOF;
+
+	/*
+	 * dentry must be in current cluster, or next cluster which
+	 * will be read
+	 */
+	if (de_next_file_offset -
+		(iter->de_file_offset / iter->read_size) * iter->read_size >=
+		iter->read_size * 2)
+		return -ERANGE;
+
+	de_offset = iter->de_file_offset % (iter->read_size * 2);
+	de_next_offset = de_next_file_offset % (iter->read_size * 2);
+
+	/* read a cluster if needed */
+	if (de_next_file_offset >= iter->next_read_offset) {
+		void *buf;
+
+		need_read_1_clus = de_next_offset < iter->read_size;
+		need_read_2_clus = de_next_offset >= iter->read_size;
+		buf = need_read_1_clus ?
+			iter->dentries : iter->dentries + iter->read_size;
+
+		ret = exfat_file_read(iter->exfat, iter->parent, buf,
+			iter->read_size, iter->next_read_offset);
+		if (ret == EOF) {
+			return EOF;
+		} else if (ret <= 0) {
+			exfat_err("failed to read a cluster. %d\n", ret);
+			return ret;
+		}
+		iter->next_read_offset += iter->read_size;
+	}
+
+	if (ith + 1 > iter->max_skip_dentries)
+		iter->max_skip_dentries = ith + 1;
+
+	*dentry = (struct exfat_dentry *) (iter->dentries + de_next_offset);
+	return 0;
+}
+
+/*
+ * @skip_dentries must be the largest @ith + 1 of exfat_de_iter_get
+ * since the last call of exfat_de_iter_advance
+ */
+int exfat_de_iter_advance(struct exfat_de_iter *iter, int skip_dentries)
+{
+	if (skip_dentries != iter->max_skip_dentries)
+		return -EINVAL;
+
+	iter->max_skip_dentries = 0;
+	iter->de_file_offset = iter->de_file_offset +
+				skip_dentries * sizeof(struct exfat_dentry);
+	return 0;
+}
+
+off_t exfat_de_iter_file_offset(struct exfat_de_iter *iter)
+{
+	return iter->de_file_offset;
+}
+
 static int read_children(struct exfat *exfat, struct exfat_node *dir)
 {
-	return -1;
+	int ret;
+	struct exfat_node *node;
+	struct exfat_dentry *dentry;
+	int dentry_count;
+	struct list_head sub_dir_list;
+	struct exfat_de_iter *de_iter;
+
+	INIT_LIST_HEAD(&sub_dir_list);
+
+	de_iter = &exfat->de_iter;
+	ret = exfat_de_iter_init(de_iter, exfat, dir);
+	if (ret == EOF)
+		return 0;
+	else if (ret)
+		return ret;
+
+	while (1) {
+		ret = exfat_de_iter_get(de_iter, 0, &dentry);
+		if (ret == EOF) {
+			break;
+		} else if (ret) {
+			exfat_err("failed to get a dentry. %d\n", ret);
+			goto err;
+		}
+
+		dentry_count = 1;
+
+		switch (dentry->type) {
+		case EXFAT_FILE:
+			break;
+		case EXFAT_VOLUME:
+			break;
+		case EXFAT_BITMAP:
+			break;
+		case EXFAT_UPCASE:
+			break;
+		default:
+			if (IS_EXFAT_DELETED(dentry->type) ||
+					(dentry->type == EXFAT_UNUSED))
+				break;
+			exfat_err("unknown entry type. 0x%x\n", dentry->type);
+			ret = -EINVAL;
+			goto err;
+		}
+
+		exfat_de_iter_advance(de_iter, dentry_count);
+	}
+out:
+	list_splice(&sub_dir_list, &exfat->dir_list);
+	return 0;
+err:
+	node_free_children(dir, false);
+	INIT_LIST_HEAD(&dir->children);
+	return ret;
 }
 
 /*
