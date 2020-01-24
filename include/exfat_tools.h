@@ -80,4 +80,8 @@ static unsigned int print_level = 1;
 		}								\
 	} while (0)								\
 
+#define exfat_err(fmt, ...)	exfat_msg(EXFAT_ERROR, fmt, ##__VA_ARGS__)
+#define exfat_info(fmt, ...)	exfat_msg(EXFAT_INFO, fmt, ##__VA_ARGS__)
+#define exfat_debug(fmt, ...)	exfat_msg(EXFAT_DEBUG, fmt, ##__VA_ARGS__)
+
 #endif /* !_EXFA_TOOLS_H */
