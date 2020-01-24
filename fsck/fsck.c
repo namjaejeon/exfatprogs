@@ -58,6 +58,15 @@ struct exfat {
 	__u64			bit_count;
 };
 
+struct exfat_stat {
+	long		dir_count;
+	long		file_count;
+	long		dir_free_count;
+	long		file_free_count;
+};
+
+struct exfat_stat exfat_stat;
+
 static struct option opts[] = {
 	{"version",	no_argument,	NULL,	'V' },
 	{"verbose",	no_argument,	NULL,	'v' },
@@ -94,12 +103,20 @@ static struct exfat_node *alloc_exfat_node(__u16 attr)
 	INIT_LIST_HEAD(&node->sibling);
 	INIT_LIST_HEAD(&node->list);
 
+	if (attr & ATTR_SUBDIR)
+		exfat_stat.dir_count++;
+	else
+		exfat_stat.file_count++;
 	node->attr = attr;
 	return node;
 }
 
 static void free_exfat_node(struct exfat_node *node)
 {
+	if (node->attr & ATTR_SUBDIR)
+		exfat_stat.dir_free_count++;
+	else
+		exfat_stat.file_free_count++;
 	free(node);
 }
 
@@ -124,6 +141,16 @@ static void free_exfat(struct exfat *exfat)
 		free(exfat->bs);
 		free(exfat);
 	}
+}
+
+void exfat_show_stat(struct exfat *exfat)
+{
+	exfat_debug("Found directories: %ld\n", exfat_stat.dir_count);
+	exfat_debug("Found files: %ld\n", exfat_stat.file_count);
+	exfat_debug("Found leak directories: %ld\n",
+			exfat_stat.dir_count - exfat_stat.dir_free_count);
+	exfat_debug("Found leak files: %ld\n",
+			exfat_stat.file_count - exfat_stat.file_free_count);
 }
 
 int main(int argc, char * const argv[])
@@ -172,6 +199,7 @@ int main(int argc, char * const argv[])
 		goto err;
 	}
 
+	exfat_show_stat(exfat);
 err:
 	free_exfat(exfat);
 	close(bd.dev_fd);
