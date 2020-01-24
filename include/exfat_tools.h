@@ -20,6 +20,8 @@
 #define MIN(a, b)	((a) < (b) ? (a) : (b))
 #define MAX(a, b)	((a) > (b) ? (a) : (b))
 
+#define DIV_ROUND_UP(__i, __d)	(((__i) + (__d) - 1) / (__d))
+
 /* Upcase tabel macro */
 #define EXFAT_UPCASE_TABLE_SIZE		(5836)
 

@@ -256,6 +256,30 @@ static int node_get_clus_next(struct exfat *exfat, struct exfat_node *node,
 	return 0;
 }
 
+static bool node_check_clus_chain(struct exfat *exfat, struct exfat_node *node)
+{
+	clus_t clus;
+	clus_t clus_count;
+
+	clus = node->first_clus;
+	clus_count = DIV_ROUND_UP(node->size, EXFAT_CLUSTER_SIZE(exfat->bs));
+
+	while (clus_count--) {
+		if (exfat_invalid_clus(exfat, clus)) {
+			exfat_err("bad cluster. 0x%x\n", clus);
+			return false;
+		}
+
+		if (node_get_clus_next(exfat, node, clus, &clus) != 0) {
+			exfat_err(
+				"broken cluster chain. (previous cluster 0x%x)\n",
+				clus);
+			return false;
+		}
+	}
+	return true;
+}
+
 static bool node_get_clus_count(struct exfat *exfat, struct exfat_node *node,
 							clus_t *clus_count)
 {
@@ -660,6 +684,198 @@ off_t exfat_de_iter_file_offset(struct exfat_de_iter *iter)
 	return iter->de_file_offset;
 }
 
+static bool check_node(struct exfat *exfat, struct exfat_node *parent,
+						struct exfat_node *node)
+{
+	int clus_count;
+	bool ret = false;
+
+	if (node->size == 0 && node->first_clus != EXFAT_FREE_CLUSTER) {
+		resolve_path_parent(&path_resolve_ctx, parent, node);
+		exfat_err("file is empty, but first cluster is %#x: %s\n",
+				node->first_clus, path_resolve_ctx.utf8_path);
+		ret = false;
+	}
+
+	if (node->size > 0 && exfat_invalid_clus(exfat, node->first_clus)) {
+		resolve_path_parent(&path_resolve_ctx, parent, node);
+		exfat_err("first cluster %#x is invalid: %s\n",
+				node->first_clus, path_resolve_ctx.utf8_path);
+		ret = false;
+	}
+
+	if (node->size > le32_to_cpu(exfat->bs->bsx.clu_count) *
+				EXFAT_CLUSTER_SIZE(exfat->bs)) {
+		resolve_path_parent(&path_resolve_ctx, parent, node);
+		exfat_err("size %llu is greater than cluster heap: %s\n",
+				node->size, path_resolve_ctx.utf8_path);
+		ret = false;
+	}
+
+	if (node->size == 0 && node->is_contiguous) {
+		resolve_path_parent(&path_resolve_ctx, parent, node);
+		exfat_err("empty, but marked as contiguous: %s\n",
+					path_resolve_ctx.utf8_path);
+		ret = false;
+	}
+
+	if ((node->attr & ATTR_SUBDIR) &&
+			node->size % EXFAT_CLUSTER_SIZE(exfat->bs) != 0) {
+		resolve_path_parent(&path_resolve_ctx, parent, node);
+		exfat_err("directory size %llu is not divisible by %d: %s\n",
+				node->size, EXFAT_CLUSTER_SIZE(exfat->bs),
+				path_resolve_ctx.utf8_path);
+		ret = false;
+	}
+
+	if (!node->is_contiguous && !node_check_clus_chain(exfat, node)) {
+		resolve_path_parent(&path_resolve_ctx, parent, node);
+		exfat_err("corrupted cluster chain: %s\n",
+				path_resolve_ctx.utf8_path);
+		ret = false;
+	}
+
+	return ret;
+}
+
+static void dentry_calc_checksum(struct exfat_dentry *dentry,
+				__le16 *checksum, bool primary)
+{
+	int i;
+	uint8_t *bytes;
+
+	bytes = (uint8_t *)dentry;
+
+	*checksum = ((*checksum << 15) | (*checksum >> 1)) + bytes[0];
+	*checksum = ((*checksum << 15) | (*checksum >> 1)) + bytes[1];
+
+	i = primary ? 4 : 2;
+	for (; i < sizeof(*dentry); i++) {
+		*checksum = ((*checksum << 15) | (*checksum >> 1)) + bytes[i];
+	}
+}
+
+static __le16 file_calc_checksum(struct exfat_de_iter *iter)
+{
+	__le16 checksum;
+	struct exfat_dentry *file_de, *de;
+	int i;
+
+	checksum = 0;
+	exfat_de_iter_get(iter, 0, &file_de);
+
+	dentry_calc_checksum(file_de, &checksum, true);
+	for (i = 1; i <= file_de->file_num_ext; i++) {
+		exfat_de_iter_get(iter, i, &de);
+		dentry_calc_checksum(de, &checksum, false);
+	}
+
+	return checksum;
+}
+
+static int read_file_dentries(struct exfat_de_iter *iter,
+			struct exfat_node **new_node, int *skip_dentries)
+{
+	struct exfat_dentry *file_de, *stream_de, *name_de;
+	struct exfat_node *node;
+	int i, ret;
+	__le16 checksum;
+
+	/* TODO: mtime, atime, ... */
+
+	ret = exfat_de_iter_get(iter, 0, &file_de);
+	if (ret || file_de->type != EXFAT_FILE) {
+		exfat_err("failed to get file dentry. %d\n", ret);
+		return ret;
+	}
+	ret = exfat_de_iter_get(iter, 1, &stream_de);
+	if (ret || stream_de->type != EXFAT_STREAM) {
+		exfat_err("failed to get stream dentry. %d\n", ret);
+		return ret;
+	}
+
+	*new_node = NULL;
+	node = alloc_exfat_node(le16_to_cpu(file_de->file_attr));
+	if (!node)
+		return -ENOMEM;
+
+	if (file_de->file_num_ext < 2) {
+		exfat_err("too few secondary count. %d\n",
+				file_de->file_num_ext);
+		free_exfat_node(node);
+		return -EINVAL;
+	}
+
+	for (i = 2; i <= file_de->file_num_ext; i++) {
+		ret = exfat_de_iter_get(iter, i, &name_de);
+		if (ret || name_de->type != EXFAT_NAME) {
+			exfat_err("failed to get name dentry. %d\n", ret);
+			goto err;
+		}
+
+		memcpy(node->name +
+			(i-2) * ENTRY_NAME_MAX, name_de->name_unicode,
+			sizeof(name_de->name_unicode));
+	}
+
+	checksum = file_calc_checksum(iter);
+	if (file_de->file_checksum != checksum) {
+		exfat_err("invalid checksum. 0x%x != 0x%x\n",
+			le16_to_cpu(file_de->file_checksum),
+			le16_to_cpu(checksum));
+		ret = -EINVAL;
+		goto err;
+	}
+
+	node->size = le64_to_cpu(stream_de->stream_size);
+	node->first_clus = le32_to_cpu(stream_de->stream_start_clu);
+	node->is_contiguous =
+		((stream_de->stream_flags & EXFAT_SF_CONTIGUOUS) != 0);
+
+	if (le64_to_cpu(stream_de->stream_valid_size) > node->size) {
+		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
+		exfat_err("valid size %llu greater than size %llu: %s\n",
+			le64_to_cpu(stream_de->stream_valid_size), node->size,
+			path_resolve_ctx.utf8_path);
+		goto err;
+	}
+
+	*skip_dentries = (file_de->file_num_ext + 1);
+	*new_node = node;
+	return 0;
+err:
+	*skip_dentries = 0;
+	*new_node = NULL;
+	free_exfat_node(node);
+	return ret;
+}
+
+static int read_child(struct exfat_de_iter *de_iter,
+		struct exfat_node **new_node, int *dentry_count)
+{
+	struct exfat_node *node;
+	int ret;
+
+	*new_node = NULL;
+
+	ret = read_file_dentries(de_iter, &node, dentry_count);
+	if (ret) {
+		exfat_err("corrupted file directory entries.\n");
+		return ret;
+	}
+
+	ret = check_node(de_iter->exfat, de_iter->parent, node);
+	if (ret) {
+		exfat_err("corrupted file directory entries.\n");
+		free_exfat_node(node);
+		return ret;
+	}
+
+	node->dentry_file_offset = exfat_de_iter_file_offset(de_iter);
+	*new_node = node;
+	return 0;
+}
+
 static int read_children(struct exfat *exfat, struct exfat_node *dir)
 {
 	int ret;
@@ -691,6 +907,16 @@ static int read_children(struct exfat *exfat, struct exfat_node *dir)
 
 		switch (dentry->type) {
 		case EXFAT_FILE:
+			ret = read_child(de_iter, &node, &dentry_count);
+			if (ret) {
+				exfat_err("failed to verify file. %d\n", ret);
+				goto err;
+			}
+
+			node->parent = dir;
+			list_add_tail(&node->sibling, &dir->children);
+			if ((node->attr & ATTR_SUBDIR) && node->size)
+				list_add_tail(&node->list, &sub_dir_list);
 			break;
 		case EXFAT_VOLUME:
 			break;
