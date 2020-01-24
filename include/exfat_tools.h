@@ -15,6 +15,8 @@
 
 #define __round_mask(x, y) ((__typeof__(x))((y)-1))
 #define round_up(x, y) ((((x)-1) | __round_mask(x, y))+1)
+#define MIN(a, b)	((a) < (b) ? (a) : (b))
+#define MAX(a, b)	((a) > (b) ? (a) : (b))
 
 /* Upcase tabel macro */
 #define EXFAT_UPCASE_TABLE_SIZE		(5836)

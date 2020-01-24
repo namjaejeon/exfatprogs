@@ -131,6 +131,55 @@ static void free_exfat_node(struct exfat_node *node)
 	free(node);
 }
 
+static void node_free_children(struct exfat_node *dir, bool file_only)
+{
+	struct exfat_node *node, *i;
+
+	list_for_each_entry_safe(node, i, &dir->children, sibling) {
+		if (file_only) {
+			if (!(node->attr & ATTR_SUBDIR)) {
+				list_del(&node->sibling);
+				free_exfat_node(node);
+			}
+		} else {
+			list_del(&node->sibling);
+			list_del(&node->list);
+			free_exfat_node(node);
+		}
+	}
+}
+
+static void node_free_file_children(struct exfat_node *dir)
+{
+	node_free_children(dir, true);
+}
+
+/* delete @child and all ancestors that does not have
+ * children
+ */
+static void node_free_ancestors(struct exfat_node *child)
+{
+	struct exfat_node *parent, *node;
+
+	if (!list_empty(&child->children))
+		return;
+
+	do {
+		if (!(child->attr & ATTR_SUBDIR)) {
+			exfat_err("not directory.\n");
+			return;
+		}
+
+		parent = child->parent;
+		list_del(&child->sibling);
+		free_exfat_node(child);
+
+		child = parent;
+	} while (child && list_empty(&child->children));
+
+	return;
+}
+
 static struct exfat *alloc_exfat(struct exfat_blk_dev *bd)
 {
 	struct exfat *exfat;
@@ -152,6 +201,17 @@ static void free_exfat(struct exfat *exfat)
 		if (exfat->bs)
 			free(exfat->bs);
 		free(exfat);
+	}
+}
+
+static void exfat_free_dir_list(struct exfat *exfat)
+{
+	struct exfat_node *dir, *file, *i, *k;
+
+	list_for_each_entry_safe(dir, i, &exfat->dir_list, list) {
+		node_free_file_children(dir);
+		list_del(&dir->list);
+		free_exfat_node(dir);
 	}
 }
 
@@ -413,6 +473,59 @@ static int resolve_path_parent(struct path_resolve_ctx *ctx,
 	child->parent = old;
 	return ret;
 }
+
+static int read_children(struct exfat *exfat, struct exfat_node *dir)
+{
+	return -1;
+}
+
+/*
+ * for each directory in @dir_list.
+ * 1. read all dentries and allocate exfat_nodes for files and directories.
+ *    and append directory exfat_nodes to the head of @dir_list
+ * 2. free all of file exfat_nodes.
+ * 3. if the directory does not have children, free its exfat_node.
+ */
+static bool exfat_filesystem_check(struct exfat *exfat)
+{
+	struct exfat_node *dir;
+	int ret;
+
+	if (!exfat->root) {
+		exfat_err("root is NULL\n");
+		return false;
+	}
+
+	list_add(&exfat->root->list, &exfat->dir_list);
+
+	while (!list_empty(&exfat->dir_list)) {
+		dir = list_entry(exfat->dir_list.next, struct exfat_node, list);
+
+		if (!(dir->attr & ATTR_SUBDIR)) {
+			resolve_path(&path_resolve_ctx, dir);
+			exfat_err("failed to travel directories. "
+					"the node is not directory: %s\n",
+					path_resolve_ctx.utf8_path);
+			goto out;
+		}
+
+		if (read_children(exfat, dir)) {
+			resolve_path(&path_resolve_ctx, dir);
+			exfat_err("failed to check dentries: %s\n",
+					path_resolve_ctx.utf8_path);
+			goto out;
+		}
+
+		list_del(&dir->list);
+		node_free_file_children(dir);
+		node_free_ancestors(dir);
+	}
+out:
+	exfat_free_dir_list(exfat);
+	exfat->root = NULL;
+	return false;
+}
+
 static bool exfat_root_dir_check(struct exfat *exfat)
 {
 	struct exfat_node *root;
@@ -528,6 +641,14 @@ int main(int argc, char * const argv[])
 		goto out;
 	}
 
+	exfat_debug("verifying directory entries...\n");
+	ret = exfat_filesystem_check(exfat);
+	if (ret) {
+		exfat_err("failed to verify directory entries. %d\n", ret);
+		goto out;
+	}
+
+	printf("%s: clean\n", ui.ei.dev_name);
 out:
 	exfat_show_stat(exfat);
 err:
