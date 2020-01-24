@@ -40,11 +40,14 @@ struct exfat_blk_dev {
 
 struct exfat_user_input {
 	char dev_name[255];
+	bool writeable;
 	unsigned int cluster_size;
 	unsigned int sec_per_clu;
 	bool quick;
 	char volume_label[22];
 };
+
+void show_version(void);
 
 void exfat_set_bit(struct exfat_blk_dev *bd, char *bitmap,
 		unsigned int clu);
@@ -53,6 +56,8 @@ void exfat_clear_bit(struct exfat_blk_dev *bd, char *bitmap,
 wchar_t exfat_bad_char(wchar_t w);
 void boot_calc_checksum(unsigned char *sector, unsigned short size,
 		bool is_boot_sec, unsigned int *checksum);
+int exfat_get_blk_dev_info(struct exfat_user_input *ui,
+		struct exfat_blk_dev *bd);
 
 /*
  * Exfat Print
