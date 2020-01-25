@@ -387,74 +387,6 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 	return 0;
 }
 
-static inline unsigned int sector_size_bits(unsigned int size)
-{
-	unsigned int bits = 8;
-
-	do {
-		bits++;
-		size >>= 1;
-	} while (size > 256);
-
-	return bits;
-}
-
-static void exfat_set_default_cluster_size(struct exfat_blk_dev *bd,
-		struct exfat_user_input *ui)
-{
-	if (256 * MB >= bd->size)
-		ui->cluster_size = 4 * KB;
-	else if (32 * GB >= bd->size)
-		ui->cluster_size = 32 * KB;
-	else
-		ui->cluster_size = 128 * KB;
-}
-
-static int exfat_get_blk_dev_info(struct exfat_user_input *ui,
-		struct exfat_blk_dev *bd)
-{
-	int fd, ret = -1;
-	long long blk_dev_size;
-
-	fd = open(ui->dev_name, O_RDWR);
-	if (fd < 0)
-		return -1;
-
-	blk_dev_size = lseek(fd, 0, SEEK_END);
-	if (blk_dev_size <= 0) {
-		exfat_msg(EXFAT_ERROR,
-			"invalid block device size(%s) : %lld\n",
-			ui->dev_name, blk_dev_size);
-		ret = blk_dev_size;
-		close(fd);
-		goto out;
-	}
-
-	bd->dev_fd = fd;
-	bd->size = blk_dev_size;
-	if (!ui->cluster_size)
-		exfat_set_default_cluster_size(bd, ui);
-
-	if (ioctl(fd, BLKSSZGET, &bd->sector_size) < 0)
-		bd->sector_size = DEFAULT_SECTOR_SIZE;
-	bd->sector_size_bits = sector_size_bits(bd->sector_size);
-	bd->num_sectors = blk_dev_size / DEFAULT_SECTOR_SIZE;
-	bd->num_clusters = blk_dev_size / ui->cluster_size;
-
-	exfat_msg(EXFAT_DEBUG, "Block device name : %s\n", ui->dev_name);
-	exfat_msg(EXFAT_DEBUG, "Block device size : %lld\n", bd->size);
-	exfat_msg(EXFAT_DEBUG, "Block sector size : %u\n", bd->sector_size);
-	exfat_msg(EXFAT_DEBUG, "Number of the sectors : %u\n",
-		bd->num_sectors);
-	exfat_msg(EXFAT_DEBUG, "Number of the clusters : %u\n",
-		bd->num_clusters);
-
-	ret = 0;
-	bd->dev_fd = fd;
-out:
-	return ret;
-}
-
 static void usage(void)
 {
 	fprintf(stderr, "Usage: mkfs.exfat\n");
@@ -465,12 +397,6 @@ static void usage(void)
 	fprintf(stderr, "\t-v | --verbose			Print debug\n");
 	fprintf(stderr, "\t-h | --help				Show help\n");
 
-	exit(EXIT_FAILURE);
-}
-
-static void show_version(void)
-{
-	printf("exfat-tools version : %s\n", EXFAT_TOOLS_VERSION);
 	exit(EXIT_FAILURE);
 }
 
@@ -487,6 +413,7 @@ static struct option opts[] = {
 static void init_user_input(struct exfat_user_input *ui)
 {
 	memset(ui, 0, sizeof(struct exfat_user_input));
+	ui->writeable = true;
 	ui->quick = true;
 }
 

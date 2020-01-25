@@ -85,6 +85,9 @@
 #define ATTR_SUBDIR_LE		cpu_to_le16(0x0010)
 #define ATTR_ARCHIVE_LE		cpu_to_le16(0x0020)
 
+/* stream flags */
+#define EXFAT_SF_CONTIGUOUS		0x02
+
 #define CLUSTER_32(x)			((unsigned int)((x) & 0xFFFFFFFFU))
 #define EXFAT_EOF_CLUSTER		CLUSTER_32(~0)
 #define EXFAT_BAD_CLUSTER		(0xFFFFFFF7U)
@@ -140,6 +143,8 @@ struct expbr {
 };
 
 #define VOLUME_LABEL_MAX_LEN	22
+#define ENTRY_NAME_MAX		15
+
 struct exfat_dentry {
 	__u8 type;
 	union {
