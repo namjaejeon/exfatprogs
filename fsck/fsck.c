@@ -49,6 +49,7 @@ struct exfat_node {
 };
 
 #define EXFAT_NAME_MAX		255
+#define EXFAT_VOLUME_LABEL_MAX	11
 #define UTF16_NAME_BUFFER_SIZE	((EXFAT_NAME_MAX + 1) * sizeof(__le16))
 #define UTF8_NAME_BUFFER_SIZE	(EXFAT_NAME_MAX * 3 + 1)
 
@@ -65,7 +66,7 @@ struct exfat_de_iter {
 struct exfat {
 	struct exfat_blk_dev	*blk_dev;
 	struct pbr		*bs;
-	char			volume_label[VOLUME_LABEL_MAX_LEN*3+1];
+	char			volume_label[EXFAT_VOLUME_LABEL_MAX*3+1];
 	struct exfat_node	*root;
 	struct list_head	dir_list;
 	struct exfat_de_iter	de_iter;
@@ -876,6 +877,33 @@ static int read_child(struct exfat_de_iter *de_iter,
 	return 0;
 }
 
+static bool read_volume_label(struct exfat_de_iter *iter)
+{
+	__le16 label_name[EXFAT_VOLUME_LABEL_MAX];
+	struct exfat_dentry *dentry;
+
+	if (exfat_de_iter_get(iter, 0, &dentry))
+		return false;
+
+	if (dentry->vol_char_cnt == 0)
+		return true;
+
+	if (dentry->vol_char_cnt > EXFAT_VOLUME_LABEL_MAX) {
+		exfat_err("too long label. %d\n", dentry->vol_char_cnt);
+		return false;
+	}
+
+	memcpy(label_name, dentry->vol_label, sizeof(label_name));
+	if (utf16_to_utf8(iter->exfat->volume_label, label_name,
+			sizeof(iter->exfat->volume_label),
+			EXFAT_VOLUME_LABEL_MAX) != 0) {
+		exfat_err("error at conversion between utf16/utf8.\n");
+		return false;
+	}
+
+	return true;
+}
+
 static int read_children(struct exfat *exfat, struct exfat_node *dir)
 {
 	int ret;
@@ -919,6 +947,10 @@ static int read_children(struct exfat *exfat, struct exfat_node *dir)
 				list_add_tail(&node->list, &sub_dir_list);
 			break;
 		case EXFAT_VOLUME:
+			if (read_volume_label(de_iter)) {
+				exfat_err("failed to verify volume label\n");
+				goto err;
+			}
 			break;
 		case EXFAT_BITMAP:
 			break;
