@@ -74,6 +74,25 @@ struct exfat {
 	__u64			bit_count;
 };
 
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+typedef __u32	bitmap_t;
+#elif __BYTE_ORDER == __BIG_ENDIAN
+typedef __u8	bitmap_t;
+#else
+#error "__BYTE_ORDER is not defined"
+#endif
+
+#define BITS_PER	(sizeof(bitmap_t) * 8)
+#define BIT_MASK(__c)	(1 << ((__c) % BITS_PER))
+#define BIT_ENTRY(__c)	((__c) / BITS_PER)
+
+#define EXFAT_BITMAP_SIZE(__c_count)	\
+	(DIV_ROUND_UP(__c_count, BITS_PER) * sizeof(bitmap_t))
+#define EXFAT_BITMAP_GET(__bmap, __c)	\
+			((__bmap)[BIT_ENTRY(__c)] & BIT_MASK(__c))
+#define EXFAT_BITMAP_SET(__bmap, __c)	\
+			((__bmap)[BIT_ENTRY(__c)] |= BIT_MASK(__c))
+
 struct exfat_stat {
 	long		dir_count;
 	long		file_count;
@@ -268,6 +287,14 @@ static bool node_check_clus_chain(struct exfat *exfat, struct exfat_node *node)
 	while (clus_count--) {
 		if (exfat_invalid_clus(exfat, clus)) {
 			exfat_err("bad cluster. 0x%x\n", clus);
+			return false;
+		}
+
+		if (!EXFAT_BITMAP_GET(exfat->alloc_bitmap,
+					clus - EXFAT_FIRST_CLUSTER)) {
+			exfat_err(
+				"cluster allocated, but not in bitmap. 0x%x\n",
+				clus);
 			return false;
 		}
 
@@ -904,6 +931,56 @@ static bool read_volume_label(struct exfat_de_iter *iter)
 	return true;
 }
 
+static bool read_alloc_bitmap(struct exfat_de_iter *iter)
+{
+	struct exfat_dentry *dentry;
+	struct exfat *exfat;
+	size_t alloc_bitmap_size;
+
+	exfat = iter->exfat;
+	if (exfat_de_iter_get(iter, 0, &dentry))
+		return false;
+
+	exfat->bit_count = le32_to_cpu(exfat->bs->bsx.clu_count);
+
+	if (le64_to_cpu(dentry->bitmap_size) <
+			DIV_ROUND_UP(exfat->bit_count, 8)) {
+		exfat_err("invalid size of allocation bitmap. 0x%llx\n",
+				le64_to_cpu(dentry->bitmap_size));
+		return false;
+	}
+	if (exfat_invalid_clus(exfat, le32_to_cpu(dentry->bitmap_start_clu))) {
+		exfat_err("invalid start cluster of allocate bitmap. 0x%x\n",
+				le32_to_cpu(dentry->bitmap_start_clu));
+		return false;
+	}
+
+	exfat_debug("start cluster %#x, size %#llx\n",
+			le32_to_cpu(dentry->bitmap_start_clu),
+			le64_to_cpu(dentry->bitmap_size));
+
+	/* TODO: bitmap could be very large. */
+	alloc_bitmap_size = EXFAT_BITMAP_SIZE(exfat->bit_count);
+	exfat->alloc_bitmap = (__u32 *)malloc(alloc_bitmap_size);
+	if (!exfat->alloc_bitmap) {
+		exfat_err("failed to allocate bitmap\n");
+		return false;
+	}
+
+	if (exfat_read(exfat->blk_dev->dev_fd,
+			exfat->alloc_bitmap, alloc_bitmap_size,
+			exfat_c2o(exfat,
+			le32_to_cpu(dentry->bitmap_start_clu))) !=
+			alloc_bitmap_size) {
+		exfat_err("failed to read bitmap\n");
+		free(exfat->alloc_bitmap);
+		exfat->alloc_bitmap = NULL;
+		return false;
+	}
+
+	return true;
+}
+
 static int read_children(struct exfat *exfat, struct exfat_node *dir)
 {
 	int ret;
@@ -953,6 +1030,11 @@ static int read_children(struct exfat *exfat, struct exfat_node *dir)
 			}
 			break;
 		case EXFAT_BITMAP:
+			if (!read_alloc_bitmap(de_iter)) {
+				exfat_err(
+					"failed to verify allocation bitmap\n");
+				goto err;
+			}
 			break;
 		case EXFAT_UPCASE:
 			break;
