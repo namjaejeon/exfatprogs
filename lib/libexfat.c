@@ -3,8 +3,17 @@
  *   Copyright (C) 2019 Namjae Jeon <linkinjeon@gmail.com>
  */
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <stdio.h>
+
 #include "exfat_ondisk.h"
 #include "exfat_tools.h"
+#include "mkfs.h"
 
 #if defined(__LITTLE_ENDIAN)
 #define BITOP_LE_SWIZZLE        0
@@ -72,15 +81,100 @@ wchar_t exfat_bad_char(wchar_t w)
 }
 
 void boot_calc_checksum(unsigned char *sector, unsigned short size,
-		bool is_boot_sec, unsigned int *checksum)
+		bool is_boot_sec, __le32 *checksum)
 {
 	unsigned int index;
 
-	for (index = 0; index < size; index++) {
-		if (is_boot_sec == true &&
-		    ((index == 106) || (index == 107) || (index == 112)))
-			continue;
-		*checksum = ((*checksum & 1) ? 0x80000000 : 0) +
-			(*checksum >> 1) + sector[index];
+	if (is_boot_sec) {
+		for (index = 0; index < size; index++) {
+			if ((index == 106) || (index == 107) || (index == 112))
+				continue;
+			*checksum = ((*checksum & 1) ? 0x80000000 : 0) +
+				(*checksum >> 1) + sector[index];
+		}
+	} else {
+		for (index = 0; index < size; index++) {
+			*checksum = ((*checksum & 1) ? 0x80000000 : 0) +
+				(*checksum >> 1) + sector[index];
+		}
 	}
+}
+
+void show_version(void)
+{
+	printf("exfat-tools version : %s\n", EXFAT_TOOLS_VERSION);
+	exit(EXIT_FAILURE);
+}
+
+static inline unsigned int sector_size_bits(unsigned int size)
+{
+	unsigned int bits = 8;
+
+	do {
+		bits++;
+		size >>= 1;
+	} while (size > 256);
+
+	return bits;
+}
+
+static void exfat_set_default_cluster_size(struct exfat_blk_dev *bd,
+		struct exfat_user_input *ui)
+{
+	if (256 * MB >= bd->size)
+		ui->cluster_size = 4 * KB;
+	else if (32 * GB >= bd->size)
+		ui->cluster_size = 32 * KB;
+	else
+		ui->cluster_size = 128 * KB;
+}
+
+int exfat_get_blk_dev_info(struct exfat_user_input *ui,
+		struct exfat_blk_dev *bd)
+{
+	int fd, ret = -1;
+	long long blk_dev_size;
+
+	fd = open(ui->dev_name, ui->writeable ? O_RDWR : O_RDONLY);
+	if (fd < 0)
+		return -1;
+
+	blk_dev_size = lseek(fd, 0, SEEK_END);
+	if (blk_dev_size <= 0) {
+		exfat_msg(EXFAT_ERROR,
+			"invalid block device size(%s) : %lld\n",
+			ui->dev_name, blk_dev_size);
+		ret = blk_dev_size;
+		close(fd);
+		goto out;
+	}
+
+	bd->dev_fd = fd;
+	bd->size = blk_dev_size;
+	if (!ui->cluster_size)
+		exfat_set_default_cluster_size(bd, ui);
+
+	if (ioctl(fd, BLKSSZGET, &bd->sector_size) < 0)
+		bd->sector_size = DEFAULT_SECTOR_SIZE;
+	bd->sector_size_bits = sector_size_bits(bd->sector_size);
+	bd->num_sectors = blk_dev_size / DEFAULT_SECTOR_SIZE;
+	bd->num_clusters = blk_dev_size / ui->cluster_size;
+
+	exfat_msg(EXFAT_DEBUG, "Block device name : %s\n", ui->dev_name);
+	exfat_msg(EXFAT_DEBUG, "Block device size : %lld\n", bd->size);
+	exfat_msg(EXFAT_DEBUG, "Block sector size : %u\n", bd->sector_size);
+	exfat_msg(EXFAT_DEBUG, "Number of the sectors : %llu\n",
+		bd->num_sectors);
+	exfat_msg(EXFAT_DEBUG, "Number of the clusters : %u\n",
+		bd->num_clusters);
+
+	ret = 0;
+	bd->dev_fd = fd;
+out:
+	return ret;
+}
+
+ssize_t exfat_read(int fd, void *buf, size_t size, off_t offset)
+{
+	return pread(fd, buf, size, offset);
 }
