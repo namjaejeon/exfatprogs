@@ -51,6 +51,7 @@ struct exfat_user_input {
 	unsigned int sec_per_clu;
 	bool quick;
 	char volume_label[22];
+	int volume_label_len;
 };
 
 void show_version(void);
@@ -71,6 +72,8 @@ int utf16_to_utf8(char *output, const __le16 *input, size_t outsize,
 int utf8_to_utf16(__le16 *output, const char *input, size_t outsize,
 		size_t insize);
 size_t utf16_length(const __le16 *str);
+int exfat_convert_char_to_utf16s(char *src, size_t src_len, char *dest,
+		size_t dest_len);
 
 /*
  * Exfat Print
