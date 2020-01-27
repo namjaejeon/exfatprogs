@@ -1191,7 +1191,7 @@ int main(int argc, char * const argv[])
 	if (optind != argc - 1)
 		usage(argv[0]);
 
-	printf("fsck.ext4 %s\n", EXFAT_TOOLS_VERSION);
+	printf("exfat-tools version : %s\n", EXFAT_TOOLS_VERSION);
 
 	strncpy(ui.ei.dev_name, argv[optind], sizeof(ui.ei.dev_name));
 	ret = exfat_get_blk_dev_info(&ui.ei, &bd);
