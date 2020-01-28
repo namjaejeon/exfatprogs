@@ -78,6 +78,8 @@ int utf8_to_utf16(__le16 *output, const char *input, size_t outsize,
 size_t utf16_length(const __le16 *str);
 int exfat_convert_char_to_utf16s(char *src, size_t src_len, char *dest,
 		size_t dest_len);
+int exfat_convert_utf16s_to_char(char *src, size_t src_len, char *dest,
+		size_t dest_len);
 
 /*
  * Exfat Print
