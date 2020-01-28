@@ -8,10 +8,9 @@
 #include <stdbool.h>
 #include <wchar.h>
 
-#define EXFAT_MIN_NUM_SEC_VOL		(2048)
-#define EXFAT_MAX_NUM_SEC_VOL		((2 << 64) - 1)
-
-#define EXFAT_MAX_NUM_CLUSTER		(0xFFFFFFF5)
+#define KB			(1024)
+#define MB			(1024*1024)
+#define GB			(1024UL*1024UL*1024UL)
 
 #define __round_mask(x, y) ((__typeof__(x))((y)-1))
 #define round_up(x, y) ((((x)-1) | __round_mask(x, y))+1)
@@ -21,6 +20,11 @@
 #define MAX(a, b)	((a) > (b) ? (a) : (b))
 
 #define DIV_ROUND_UP(__i, __d)	(((__i) + (__d) - 1) / (__d))
+
+#define EXFAT_MIN_NUM_SEC_VOL		(2048)
+#define EXFAT_MAX_NUM_SEC_VOL		((2 << 64) - 1)
+
+#define EXFAT_MAX_NUM_CLUSTER		(0xFFFFFFF5)
 
 /* Upcase tabel macro */
 #define EXFAT_UPCASE_TABLE_SIZE		(5836)
@@ -73,6 +77,8 @@ int utf8_to_utf16(__le16 *output, const char *input, size_t outsize,
 		size_t insize);
 size_t utf16_length(const __le16 *str);
 int exfat_convert_char_to_utf16s(char *src, size_t src_len, char *dest,
+		size_t dest_len);
+int exfat_convert_utf16s_to_char(char *src, size_t src_len, char *dest,
 		size_t dest_len);
 
 /*

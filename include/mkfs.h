@@ -10,10 +10,6 @@
 #define MIN_NUM_SECTOR		(2048)
 #define EXFAT_MAX_CLUSTER_SIZE	(32*1024*1024)
 
-#define KB			(1024)
-#define MB			(1024*1024)
-#define GB			(1024UL*1024UL*1024UL)
-
 struct exfat_mkfs_info {
 	unsigned int total_clu_cnt;
 	unsigned int used_clu_cnt;
