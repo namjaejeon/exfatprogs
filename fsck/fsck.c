@@ -1173,6 +1173,7 @@ int main(int argc, char * const argv[])
 	struct fsck_user_input ui = {0,};
 	struct exfat_blk_dev bd = {0,};
 	struct exfat *exfat = NULL;
+	bool version_only = false;
 
 	opterr = 0;
 	while ((c = getopt_long(argc, argv, "Vvh", opts, NULL)) != EOF) {
@@ -1182,7 +1183,7 @@ int main(int argc, char * const argv[])
 			ui.ei.writeable = true;
 			break;
 		case 'V':
-			show_version();
+			version_only = true;
 			break;
 		case 'v':
 			if (print_level < EXFAT_DEBUG)
@@ -1198,7 +1199,9 @@ int main(int argc, char * const argv[])
 	if (optind != argc - 1)
 		usage(argv[0]);
 
-	printf("exfat-tools version : %s\n", EXFAT_TOOLS_VERSION);
+	show_version();
+	if (version_only)
+		exit(FSCK_EXIT_SYNTAX_ERROR);
 
 	strncpy(ui.ei.dev_name, argv[optind], sizeof(ui.ei.dev_name));
 	ret = exfat_get_blk_dev_info(&ui.ei, &bd);
