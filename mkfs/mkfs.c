@@ -547,6 +547,7 @@ int main(int argc, char *argv[])
 	char *blk_dev_name;
 	struct exfat_blk_dev bd;
 	struct exfat_user_input ui;
+	bool version_only = false;
 
 	init_user_input(&ui);
 
@@ -577,7 +578,7 @@ int main(int argc, char *argv[])
 			ui.quick = false;
 			break;
 		case 'V':
-			show_version();
+			version_only = true;
 			break;
 		case 'v':
 			print_level = EXFAT_DEBUG;
@@ -591,10 +592,13 @@ int main(int argc, char *argv[])
 	if (argc - optind != 1)
 		usage();
 
+	show_version();
+	if (version_only)
+		exit(EXIT_FAILURE);
+
 	memset(ui.dev_name, 0, 255);
 	strncpy(ui.dev_name, argv[optind], 255);
 
-	printf("exfat-tools version : %s\n", EXFAT_TOOLS_VERSION);
 	ret = exfat_get_blk_dev_info(&ui, &bd);
 	if (ret < 0)
 		goto out;
