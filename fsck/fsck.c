@@ -88,6 +88,15 @@ typedef __u8	bitmap_t;
 #define EXFAT_BITMAP_SET(__bmap, __c)	\
 			((__bmap)[BIT_ENTRY(__c)] |= BIT_MASK(__c))
 
+#define FSCK_EXIT_NO_ERRORS		0x00
+#define FSCK_EXIT_CORRECTED		0x01
+#define FSCK_EXIT_NEED_REBOOT		0x02
+#define FSCK_EXIT_ERRORS_LEFT		0x04
+#define FSCK_EXIT_OPERATION_ERROR	0x08
+#define FSCK_EXIT_SYNTAX_ERROR		0x10
+#define FSCK_EXIT_USER_CANCEL		0x20
+#define FSCK_EXIT_LIBRARY_ERROR		0x80
+
 struct exfat_stat {
 	long		dir_count;
 	long		file_count;
@@ -120,7 +129,7 @@ static void usage(char *name)
 	fprintf(stderr, "\t-v | --verbose	Print debug\n");
 	fprintf(stderr, "\t-h | --help		Show help\n");
 
-	exit(EXIT_FAILURE);
+	exit(FSCK_EXIT_SYNTAX_ERROR);
 }
 
 static struct exfat_inode *alloc_exfat_inode(__u16 attr)
@@ -1014,10 +1023,12 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 				goto err;
 			}
 
-			node->parent = dir;
-			list_add_tail(&node->sibling, &dir->children);
-			if ((node->attr & ATTR_SUBDIR) && node->size)
+			if ((node->attr & ATTR_SUBDIR) && node->size) {
+				node->parent = dir;
+				list_add_tail(&node->sibling, &dir->children);
 				list_add_tail(&node->list, &sub_dir_list);
+			} else
+				free_exfat_inode(node);
 			break;
 		case EXFAT_VOLUME:
 			if (read_volume_label(de_iter)) {
@@ -1162,6 +1173,7 @@ int main(int argc, char * const argv[])
 	struct fsck_user_input ui = {0,};
 	struct exfat_blk_dev bd = {0,};
 	struct exfat *exfat = NULL;
+	bool version_only = false;
 
 	opterr = 0;
 	while ((c = getopt_long(argc, argv, "Vvh", opts, NULL)) != EOF) {
@@ -1171,7 +1183,7 @@ int main(int argc, char * const argv[])
 			ui.ei.writeable = true;
 			break;
 		case 'V':
-			show_version();
+			version_only = true;
 			break;
 		case 'v':
 			if (print_level < EXFAT_DEBUG)
@@ -1187,24 +1199,27 @@ int main(int argc, char * const argv[])
 	if (optind != argc - 1)
 		usage(argv[0]);
 
-	printf("exfat-tools version : %s\n", EXFAT_TOOLS_VERSION);
+	show_version();
+	if (version_only)
+		exit(FSCK_EXIT_SYNTAX_ERROR);
 
 	strncpy(ui.ei.dev_name, argv[optind], sizeof(ui.ei.dev_name));
 	ret = exfat_get_blk_dev_info(&ui.ei, &bd);
 	if (ret < 0) {
 		exfat_err("failed to open %s. %d\n", ui.ei.dev_name, ret);
-		return ret;
+		return FSCK_EXIT_OPERATION_ERROR;
 	}
 
 	exfat = alloc_exfat(&bd);
 	if (!exfat) {
-		ret = -ENOMEM;
+		ret = FSCK_EXIT_OPERATION_ERROR;
 		goto err;
 	}
 
 	exfat_debug("verifying boot regions...\n");
 	if (!exfat_boot_region_check(exfat)) {
 		exfat_err("failed to verify boot regions.\n");
+		ret = FSCK_EXIT_ERRORS_LEFT;
 		goto err;
 	}
 
@@ -1213,6 +1228,7 @@ int main(int argc, char * const argv[])
 	exfat_debug("verifying root directory...\n");
 	if (!exfat_root_dir_check(exfat)) {
 		exfat_err("failed to verify root directory.\n");
+		ret = FSCK_EXIT_ERRORS_LEFT;
 		goto out;
 	}
 
@@ -1220,10 +1236,12 @@ int main(int argc, char * const argv[])
 	ret = exfat_filesystem_check(exfat);
 	if (ret) {
 		exfat_err("failed to verify directory entries. %d\n", ret);
+		ret = FSCK_EXIT_ERRORS_LEFT;
 		goto out;
 	}
 
 	printf("%s: clean\n", ui.ei.dev_name);
+	ret = FSCK_EXIT_NO_ERRORS;
 out:
 	exfat_show_stat(exfat);
 err:
