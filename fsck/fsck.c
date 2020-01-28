@@ -468,12 +468,13 @@ static bool exfat_boot_region_check(struct exfat *exfat)
 		goto err;
 	}
 
-	if (EXFAT_SECTOR_SIZE(bs) < 512) {
-		exfat_err("too small sector size: %d\n", EXFAT_SECTOR_SIZE(bs));
+	if (EXFAT_SECTOR_SIZE(bs) < 512 || EXFAT_SECTOR_SIZE(bs) > 4 * KB) {
+		exfat_err("too small or big sector size: %d\n",
+				EXFAT_SECTOR_SIZE(bs));
 		goto err;
 	}
 
-	if (EXFAT_CLUSTER_SIZE(bs) > 32U * 1024 * 1024) {
+	if (EXFAT_CLUSTER_SIZE(bs) > 32 * MB) {
 		exfat_err("too big cluster size: %d\n", EXFAT_CLUSTER_SIZE(bs));
 		goto err;
 	}
