@@ -1023,10 +1023,12 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 				goto err;
 			}
 
-			node->parent = dir;
-			list_add_tail(&node->sibling, &dir->children);
-			if ((node->attr & ATTR_SUBDIR) && node->size)
+			if ((node->attr & ATTR_SUBDIR) && node->size) {
+				node->parent = dir;
+				list_add_tail(&node->sibling, &dir->children);
 				list_add_tail(&node->list, &sub_dir_list);
+			} else
+				free_exfat_inode(node);
 			break;
 		case EXFAT_VOLUME:
 			if (read_volume_label(de_iter)) {
