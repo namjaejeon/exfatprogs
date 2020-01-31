@@ -20,6 +20,7 @@
 #include "exfat_ondisk.h"
 #include "exfat_tools.h"
 #include "mkfs.h"
+#include "exfat_iconv.h"
 
 struct exfat_mkfs_info finfo;
 
@@ -363,7 +364,8 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 	ed[0].type = EXFAT_VOLUME;
 	memset(ed[0].vol_label, 0, 22);
 	memcpy(ed[0].vol_label, ui->volume_label, ui->volume_label_len);
-	ed[0].vol_char_cnt = ui->volume_label_len;
+	ed[0].vol_char_cnt = exfat_iconv_encstr_len(ui->volume_label,
+						ui->volume_label_len);
 
 	/* Set bitmap entry */
 	ed[1].type = EXFAT_BITMAP;
@@ -548,21 +550,27 @@ int main(int argc, char *argv[])
 	struct exfat_blk_dev bd;
 	struct exfat_user_input ui;
 	bool version_only = false;
+	struct exfat_iconv exfat_iconv;
 
 	init_user_input(&ui);
+
+	if (exfat_iconv_open(&exfat_iconv) < 0) {
+		exfat_msg(EXFAT_ERROR, "failed to init iconv\n");
+		return EXIT_FAILURE;
+	}
 
 	opterr = 0;
 	while ((c = getopt_long(argc, argv, "l:c:fVvh", opts, NULL)) != EOF)
 		switch (c) {
 		case 'l':
 		{
-			ret = exfat_convert_char_to_utf16s(optarg,
-				strlen(optarg), ui.volume_label,
-				VOLUME_LABEL_MAX_LEN);
+			ret = exfat_iconv_enc(&exfat_iconv, optarg,
+					strlen(optarg), ui.volume_label,
+					sizeof(ui.volume_label));
 			if (ret < 0)
 				goto out;
 
-			ui.volume_label_len = VOLUME_LABEL_MAX_LEN - ret;
+			ui.volume_label_len = ret;
 			break;
 		}
 		case 'c':
@@ -589,8 +597,10 @@ int main(int argc, char *argv[])
 			usage();
 	}
 
-	if (argc - optind != 1)
+	if (argc - optind != 1) {
+		exfat_iconv_close(&exfat_iconv);
 		usage();
+	}
 
 	show_version();
 	if (version_only)
@@ -622,6 +632,7 @@ out:
 		exfat_msg(EXFAT_INFO, "\nexFAT format complete!\n");
 	else
 		exfat_msg(EXFAT_INFO, "\nexFAT format fail!\n");
+	exfat_iconv_close(&exfat_iconv);
 	close(bd.dev_fd);
 	return ret;
 }

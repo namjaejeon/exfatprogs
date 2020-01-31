@@ -142,7 +142,7 @@ struct expbr {
 	struct exbs eb[8];
 };
 
-#define VOLUME_LABEL_MAX_LEN	22
+#define VOLUME_LABEL_MAX_LEN	11
 #define ENTRY_NAME_MAX		15
 
 struct exfat_dentry {
@@ -150,7 +150,7 @@ struct exfat_dentry {
 	union {
 		struct {
 			__u8 character_count;
-			__u8 volume_label[22];
+			__le16 volume_label[VOLUME_LABEL_MAX_LEN];
 			__u8 reserved[8];
 		} __attribute__((packed)) vol; /* file directory entry */
 
