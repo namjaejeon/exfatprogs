@@ -13,6 +13,7 @@
 
 #include "exfat_ondisk.h"
 #include "exfat_tools.h"
+#include "exfat_iconv.h"
 #include "list.h"
 
 #define EXFAT_CLUSTER_SIZE(pbr) (1 << ((pbr)->bsx.sect_size_bits +	\
@@ -43,10 +44,11 @@ struct exfat_inode {
 	__le16			name[0];	/* only for directory */
 };
 
-#define EXFAT_NAME_MAX		255
-#define EXFAT_VOLUME_LABEL_MAX	11
-#define UTF16_NAME_BUFFER_SIZE	((EXFAT_NAME_MAX + 1) * sizeof(__le16))
-#define UTF8_NAME_BUFFER_SIZE	(EXFAT_NAME_MAX * 3 + 1)
+#define EXFAT_NAME_MAX			255
+#define VOLUME_LABEL_BUFFER_SIZE	(EXFAT_DECSTR_MAX_BUFSIZE(	\
+						VOLUME_LABEL_MAX_LEN))
+#define NAME_BUFFER_SIZE		(EXFAT_ENCSTR_MAX_BUFSIZE(	\
+						EXFAT_NAME_MAX))
 
 struct exfat_de_iter {
 	struct exfat		*exfat;
@@ -61,7 +63,7 @@ struct exfat_de_iter {
 struct exfat {
 	struct exfat_blk_dev	*blk_dev;
 	struct pbr		*bs;
-	char			volume_label[EXFAT_VOLUME_LABEL_MAX*3+1];
+	char			volume_label[VOLUME_LABEL_BUFFER_SIZE];
 	struct exfat_inode	*root;
 	struct list_head	dir_list;
 	struct exfat_de_iter	de_iter;
@@ -112,6 +114,7 @@ struct path_resolve_ctx {
 
 struct exfat_stat exfat_stat;
 struct path_resolve_ctx path_resolve_ctx;
+struct exfat_iconv exfat_iconv;
 
 static struct option opts[] = {
 	{"version",	no_argument,	NULL,	'V' },
@@ -137,7 +140,7 @@ static struct exfat_inode *alloc_exfat_inode(__u16 attr)
 	struct exfat_inode *node;
 	int size;
 
-	size = offsetof(struct exfat_inode, name) + UTF16_NAME_BUFFER_SIZE;
+	size = offsetof(struct exfat_inode, name) + NAME_BUFFER_SIZE;
 	node = (struct exfat_inode *)calloc(1, size);
 	if (!node) {
 		exfat_err("failed to allocate exfat_node\n");
@@ -545,7 +548,8 @@ bool get_ancestors(struct exfat_inode *child,
 
 	dir = child;
 	while (dir) {
-		name_len = utf16_length(dir->name);
+		name_len = exfat_iconv_encstr_len((char *)dir->name,
+						NAME_BUFFER_SIZE);
 		if (char_len + name_len > max_char_len)
 			break;
 
@@ -565,13 +569,13 @@ bool get_ancestors(struct exfat_inode *child,
 	return dir == NULL;
 }
 
-static int resolve_path(struct path_resolve_ctx *ctx,
-						struct exfat_inode *child)
+static int resolve_path(struct path_resolve_ctx *ctx, struct exfat_inode *child)
 {
 	int ret = 0;
 	int depth, i;
 	int name_len, path_len;
 	__le16 *utf16_path;
+	size_t in_size;
 
 	ctx->utf8_path[0] = '\0';
 
@@ -583,17 +587,22 @@ static int resolve_path(struct path_resolve_ctx *ctx,
 
 	utf16_path = ctx->utf16_path;
 	for (i = 0; i < depth; i++) {
-		name_len = utf16_length(ctx->ancestors[i]->name);
+		name_len = exfat_iconv_encstr_len(
+				(char *)ctx->ancestors[i]->name,
+				NAME_BUFFER_SIZE);
 		memcpy((char *)utf16_path, (char *)ctx->ancestors[i]->name,
 				name_len * 2);
 		utf16_path += name_len;
 		memcpy((char *)utf16_path, u"/", 2);
-		utf16_path += 1;
+		utf16_path++;
 	}
 
-	ret = utf16_to_utf8(ctx->utf8_path, ctx->utf16_path,
-		sizeof(ctx->utf8_path), utf16_path - ctx->utf16_path - 1);
-	return ret;
+	if (depth > 0)
+		utf16_path--;
+	in_size = (utf16_path - ctx->utf16_path) * sizeof(__le16);
+	return exfat_iconv_dec(&exfat_iconv,
+			(char *)ctx->utf16_path, in_size,
+			(char *)ctx->utf8_path, sizeof(ctx->utf8_path));
 }
 
 static int resolve_path_parent(struct path_resolve_ctx *ctx,
@@ -911,28 +920,27 @@ static int read_child(struct exfat_de_iter *de_iter,
 
 static bool read_volume_label(struct exfat_de_iter *iter)
 {
-	__le16 label_name[EXFAT_VOLUME_LABEL_MAX];
+	struct exfat *exfat;
 	struct exfat_dentry *dentry;
 
+	exfat = iter->exfat;
 	if (exfat_de_iter_get(iter, 0, &dentry))
 		return false;
 
 	if (dentry->vol_char_cnt == 0)
 		return true;
 
-	if (dentry->vol_char_cnt > EXFAT_VOLUME_LABEL_MAX) {
+	if (dentry->vol_char_cnt > VOLUME_LABEL_MAX_LEN) {
 		exfat_err("too long label. %d\n", dentry->vol_char_cnt);
 		return false;
 	}
 
-	memcpy(label_name, dentry->vol_label, sizeof(label_name));
-	if (utf16_to_utf8(iter->exfat->volume_label, label_name,
-			sizeof(iter->exfat->volume_label),
-			EXFAT_VOLUME_LABEL_MAX) != 0) {
-		exfat_err("error at conversion between utf16/utf8.\n");
+	if (exfat_iconv_dec(&exfat_iconv,
+		(char *)dentry->vol_label, sizeof(dentry->vol_label),
+		(char *)exfat->volume_label, sizeof(exfat->volume_label))) {
+		exfat_err("failed to decode volume label\n");
 		return false;
 	}
-
 	return true;
 }
 
@@ -1203,6 +1211,11 @@ int main(int argc, char * const argv[])
 	if (version_only)
 		exit(FSCK_EXIT_SYNTAX_ERROR);
 
+	if (exfat_iconv_open(&exfat_iconv) < 0) {
+		exfat_err("failed to init iconv\n");
+		return FSCK_EXIT_OPERATION_ERROR;
+	}
+
 	strncpy(ui.ei.dev_name, argv[optind], sizeof(ui.ei.dev_name));
 	ret = exfat_get_blk_dev_info(&ui.ei, &bd);
 	if (ret < 0) {
@@ -1247,5 +1260,6 @@ out:
 err:
 	free_exfat(exfat);
 	close(bd.dev_fd);
+	exfat_iconv_close(&exfat_iconv);
 	return ret;
 }
