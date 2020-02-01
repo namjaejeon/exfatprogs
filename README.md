@@ -1,12 +1,12 @@
 
-## exfat-tools ?
-Exfat-tools is mkfs(format)/fsck(repair) implementation for exfat filesystem under GNU GPL version 2.
+## exfat-utils ?
+Exfat-utils is mkfs(format)/fsck(repair) implementation for exfat filesystem under GNU GPL version 2.
 
 ## Maintainers
 * Namjae Jeon <linkinjeon@gmail.com>
 * Hyunchul Lee <hyc.lee@gmail.com>
 
-## Buidling exfat tools
+## Buidling exfat-utils
 Install preprequisite packages:
 ```
 	For Ubuntu:
@@ -18,14 +18,14 @@ Install preprequisite packages:
 
 Build steps:
 ```
-        cd into the exfat-tools directory
+        cd into the exfat-utils directory
         ./autogen.sh
         ./configure
         make
         make install
 ```
 
-## Using exFAT tools
+## Using exfat-utils
 ```
 - mkfs.exfat:
 	Build a exfat filesystem on a device or partition(e.g. /dev/hda1, dev/sda1).
