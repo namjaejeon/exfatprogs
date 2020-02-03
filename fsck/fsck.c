@@ -937,10 +937,12 @@ static bool read_volume_label(struct exfat_de_iter *iter)
 
 	if (exfat_iconv_dec(&exfat_iconv,
 		(char *)dentry->vol_label, sizeof(dentry->vol_label),
-		(char *)exfat->volume_label, sizeof(exfat->volume_label))) {
+		(char *)exfat->volume_label, sizeof(exfat->volume_label)) < 0) {
 		exfat_err("failed to decode volume label\n");
 		return false;
 	}
+
+	exfat_info("volume label [%s]\n", exfat->volume_label);
 	return true;
 }
 
@@ -1039,7 +1041,7 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 				free_exfat_inode(node);
 			break;
 		case EXFAT_VOLUME:
-			if (read_volume_label(de_iter)) {
+			if (!read_volume_label(de_iter)) {
 				exfat_err("failed to verify volume label\n");
 				goto err;
 			}
@@ -1152,8 +1154,6 @@ err:
 
 void exfat_show_info(struct exfat *exfat)
 {
-	exfat_info("volume label [%s]\n",
-			exfat->volume_label);
 	exfat_info("Bytes per sector: %d\n",
 			1 << le32_to_cpu(exfat->bs->bsx.sect_size_bits));
 	exfat_info("Sectors per cluster: %d\n",
