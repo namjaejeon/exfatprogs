@@ -1,0 +1,93 @@
+#include <stdio.h>
+#include <string.h>
+
+#include "exfat_ondisk.h"
+#include "exfat_tools.h"
+#include "fsck.h"
+#include "repair.h"
+
+struct exfat_repair_problem {
+	er_problem_code_t	prcode;
+	const char		*description;
+	bool (*fix_problem)(struct exfat *exfat,
+			struct exfat_repair_problem *pr,
+			union exfat_repair_context *rctx);
+};
+
+static bool fix_bs_checksum(struct exfat *exfat,
+			struct exfat_repair_problem *pr,
+			union exfat_repair_context *rctx)
+{
+	unsigned int size;
+	int i;
+
+	size = EXFAT_SECTOR_SIZE(exfat->bs);
+	for (i = 0; i < size/sizeof(__le32); i++) {
+		((__le32 *)rctx->bs_checksum.checksum_sect)[i] =
+				rctx->bs_checksum.checksum;
+	}
+
+	if (exfat_write(exfat->blk_dev->dev_fd,
+			rctx->bs_checksum.checksum_sect,
+			size, size * 11) != size) {
+		exfat_err("failed to write checksum sector\n");
+		return false;
+	}
+
+	return true;
+}
+
+static struct exfat_repair_problem problems[] = {
+	{ER_BS_CHECKSUM,
+		"the checksum of boot sector is not correct",
+		fix_bs_checksum},
+};
+
+static struct exfat_repair_problem *find_problem(er_problem_code_t prcode)
+{
+	int i;
+
+	for (i = 0; i < sizeof(problems)/sizeof(problems[0]); i++) {
+		if (problems[i].prcode == prcode) {
+			return &problems[i];
+		}
+	}
+	return NULL;
+}
+
+static bool ask_repair(struct exfat *exfat, struct exfat_repair_problem *pr)
+{
+	char answer[8];
+
+	do {
+		printf("%s: Fix (y/N)?", pr->description);
+		fflush(stdout);
+
+		if (fgets(answer, sizeof(answer), stdin)) {
+			if (strcasecmp(answer, "Y\n") == 0)
+				return true;
+			else if (strcasecmp(answer, "\n") == 0 ||
+				strcasecmp(answer, "N\n") == 0)
+				return false;
+		}
+	} while (1);
+
+	return false;
+}
+
+bool exfat_repair(struct exfat *exfat, er_problem_code_t prcode,
+			union exfat_repair_context *rctx)
+{
+	struct exfat_repair_problem *pr = NULL;
+	int need_repair;
+
+	pr = find_problem(prcode);
+	if (!pr) {
+		exfat_err("unknown problem code. %#x\n", prcode);
+		return false;
+	}
+
+	need_repair = ask_repair(exfat, pr);
+	if (need_repair)
+		return pr->fix_problem(exfat, pr, rctx);
+}
