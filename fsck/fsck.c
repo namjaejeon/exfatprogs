@@ -1183,6 +1183,8 @@ int main(int argc, char * const argv[])
 	struct exfat *exfat = NULL;
 	bool version_only = false;
 
+	print_level = EXFAT_ERROR;
+
 	opterr = 0;
 	while ((c = getopt_long(argc, argv, "Vvh", opts, NULL)) != EOF) {
 		switch (c) {
