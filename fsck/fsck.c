@@ -15,6 +15,7 @@
 #include "exfat_tools.h"
 #include "exfat_iconv.h"
 #include "fsck.h"
+#include "repair.h"
 
 enum fsck_ui_options {
 	FSCK_OPTS_REPAIR	= 0x01,
@@ -71,6 +72,7 @@ struct path_resolve_ctx path_resolve_ctx;
 struct exfat_iconv exfat_iconv;
 
 static struct option opts[] = {
+	{"repair",	no_argument,	NULL,	'r' },
 	{"version",	no_argument,	NULL,	'V' },
 	{"verbose",	no_argument,	NULL,	'v' },
 	{"help",	no_argument,	NULL,	'h' },
@@ -394,10 +396,16 @@ static int boot_region_checksum(struct exfat *exfat)
 	}
 	for (i = 0; i < size/sizeof(checksum); i++) {
 		if (le32_to_cpu(((__le32 *)sect)[i]) != checksum) {
-			exfat_err("invalid checksum. 0x%x\n",
+			union exfat_repair_context rctx = {
+				.bs_checksum.checksum		= checksum,
+				.bs_checksum.checksum_sect	= sect,
+			};
+			if (!exfat_repair(exfat, ER_BS_CHECKSUM, &rctx)) {
+				exfat_err("invalid checksum. 0x%x\n",
 					le32_to_cpu(((__le32 *)sect)[i]));
-			free(sect);
-			return -EIO;
+				free(sect);
+				return -EIO;
+			}
 		}
 	}
 
@@ -1140,7 +1148,7 @@ int main(int argc, char * const argv[])
 	print_level = EXFAT_ERROR;
 
 	opterr = 0;
-	while ((c = getopt_long(argc, argv, "Vvh", opts, NULL)) != EOF) {
+	while ((c = getopt_long(argc, argv, "rVvh", opts, NULL)) != EOF) {
 		switch (c) {
 		case 'r':
 			ui.options |= FSCK_OPTS_REPAIR;
@@ -1209,6 +1217,7 @@ int main(int argc, char * const argv[])
 		goto out;
 	}
 
+	fsync(bd.dev_fd);
 	printf("%s: clean\n", ui.ei.dev_name);
 	ret = FSCK_EXIT_NO_ERRORS;
 out:
