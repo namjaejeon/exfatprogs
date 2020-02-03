@@ -180,3 +180,8 @@ ssize_t exfat_read(int fd, void *buf, size_t size, off_t offset)
 {
 	return pread(fd, buf, size, offset);
 }
+
+ssize_t exfat_write(int fd, void *buf, size_t size, off_t offset)
+{
+	return pwrite(fd, buf, size, offset);
+}
