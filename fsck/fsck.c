@@ -17,10 +17,6 @@
 #include "fsck.h"
 #include "repair.h"
 
-enum fsck_ui_options {
-	FSCK_OPTS_REPAIR	= 0x01,
-};
-
 struct fsck_user_input {
 	struct exfat_user_input		ei;
 	enum fsck_ui_options		options;
@@ -73,6 +69,8 @@ struct exfat_iconv exfat_iconv;
 
 static struct option opts[] = {
 	{"repair",	no_argument,	NULL,	'r' },
+	{"repair-yes",	no_argument,	NULL,	'y' },
+	{"repair-no",	no_argument,	NULL,	'n' },
 	{"version",	no_argument,	NULL,	'V' },
 	{"verbose",	no_argument,	NULL,	'v' },
 	{"help",	no_argument,	NULL,	'h' },
@@ -83,10 +81,12 @@ static struct option opts[] = {
 static void usage(char *name)
 {
 	fprintf(stderr, "Usage: %s\n", name);
-	fprintf(stderr, "\t-r | --repair	Repair\n");
-	fprintf(stderr, "\t-V | --version	Show version\n");
-	fprintf(stderr, "\t-v | --verbose	Print debug\n");
-	fprintf(stderr, "\t-h | --help		Show help\n");
+	fprintf(stderr, "\t-r | --repair        Repair interactively\n");
+	fprintf(stderr, "\t-y | --repair-yes    Repair without ask\n");
+	fprintf(stderr, "\t-n | --repair-no     No repair\n");
+	fprintf(stderr, "\t-V | --version       Show version\n");
+	fprintf(stderr, "\t-v | --verbose       Print debug\n");
+	fprintf(stderr, "\t-h | --help          Show help\n");
 
 	exit(FSCK_EXIT_SYNTAX_ERROR);
 }
@@ -1148,10 +1148,24 @@ int main(int argc, char * const argv[])
 	print_level = EXFAT_ERROR;
 
 	opterr = 0;
-	while ((c = getopt_long(argc, argv, "rVvh", opts, NULL)) != EOF) {
+	while ((c = getopt_long(argc, argv, "rynVvh", opts, NULL)) != EOF) {
 		switch (c) {
+		case 'n':
+			if (ui.options & FSCK_OPTS_REPAIR)
+				usage(argv[0]);
+			ui.options |= FSCK_OPTS_REPAIR_NO;
+			ui.ei.writeable = false;
+			break;
 		case 'r':
-			ui.options |= FSCK_OPTS_REPAIR;
+			if (ui.options & FSCK_OPTS_REPAIR)
+				usage(argv[0]);
+			ui.options |= FSCK_OPTS_REPAIR_ASK;
+			ui.ei.writeable = true;
+			break;
+		case 'y':
+			if (ui.options & FSCK_OPTS_REPAIR)
+				usage(argv[0]);
+			ui.options |= FSCK_OPTS_REPAIR_YES;
 			ui.ei.writeable = true;
 			break;
 		case 'V':
@@ -1192,6 +1206,7 @@ int main(int argc, char * const argv[])
 		ret = FSCK_EXIT_OPERATION_ERROR;
 		goto err;
 	}
+	exfat->options = ui.options;
 
 	exfat_debug("verifying boot regions...\n");
 	if (!exfat_boot_region_check(exfat)) {
@@ -1217,7 +1232,8 @@ int main(int argc, char * const argv[])
 		goto out;
 	}
 
-	fsync(bd.dev_fd);
+	if (ui.ei.writeable)
+		fsync(bd.dev_fd);
 	printf("%s: clean\n", ui.ei.dev_name);
 	ret = FSCK_EXIT_NO_ERRORS;
 out:
