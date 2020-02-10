@@ -59,19 +59,28 @@ static bool ask_repair(struct exfat *exfat, struct exfat_repair_problem *pr)
 {
 	char answer[8];
 
-	do {
-		printf("%s: Fix (y/N)?", pr->description);
-		fflush(stdout);
+	switch (exfat->options & FSCK_OPTS_REPAIR) {
+	case FSCK_OPTS_REPAIR_ASK:
+		do {
+			printf("%s: Fix (y/N)?", pr->description);
+			fflush(stdout);
 
-		if (fgets(answer, sizeof(answer), stdin)) {
-			if (strcasecmp(answer, "Y\n") == 0)
-				return true;
-			else if (strcasecmp(answer, "\n") == 0 ||
-				strcasecmp(answer, "N\n") == 0)
-				return false;
-		}
-	} while (1);
-
+			if (fgets(answer, sizeof(answer), stdin)) {
+				if (strcasecmp(answer, "Y\n") == 0)
+					return true;
+				else if (strcasecmp(answer, "\n") == 0 ||
+					strcasecmp(answer, "N\n") == 0)
+					return false;
+			}
+		} while (1);
+		return false;
+	case FSCK_OPTS_REPAIR_YES:
+		return true;
+	case FSCK_OPTS_REPAIR_NO:
+	case 0:
+	default:
+		return false;
+	}
 	return false;
 }
 
@@ -81,13 +90,15 @@ bool exfat_repair(struct exfat *exfat, er_problem_code_t prcode,
 	struct exfat_repair_problem *pr = NULL;
 	int need_repair;
 
+	need_repair = ask_repair(exfat, pr);
+	if (!need_repair)
+		return false;
+
 	pr = find_problem(prcode);
 	if (!pr) {
 		exfat_err("unknown problem code. %#x\n", prcode);
 		return false;
 	}
 
-	need_repair = ask_repair(exfat, pr);
-	if (need_repair)
-		return pr->fix_problem(exfat, pr, rctx);
+	return pr->fix_problem(exfat, pr, rctx);
 }
