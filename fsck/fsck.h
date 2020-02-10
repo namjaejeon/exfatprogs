@@ -39,7 +39,15 @@ struct exfat_de_iter {
 	int			max_skip_dentries;
 };
 
+enum fsck_ui_options {
+	FSCK_OPTS_REPAIR_ASK	= 0x01,
+	FSCK_OPTS_REPAIR_YES	= 0x02,
+	FSCK_OPTS_REPAIR_NO	= 0x04,
+	FSCK_OPTS_REPAIR	= 0x07,
+};
+
 struct exfat {
+	enum fsck_ui_options	options;
 	struct exfat_blk_dev	*blk_dev;
 	struct pbr		*bs;
 	char			volume_label[VOLUME_LABEL_BUFFER_SIZE];
