@@ -542,6 +542,23 @@ static int make_exfat(struct exfat_blk_dev *bd, struct exfat_user_input *ui)
 	return 0;
 }
 
+static long long parse_cluster_size(const char *size)
+{
+	char *data_unit;
+	unsigned long long byte_size = strtoull(size, &data_unit, 0);
+
+	switch (*data_unit) {
+	case 'M':
+	case 'm':
+		byte_size <<= 10;
+	case 'K':
+	case 'k':
+		byte_size <<= 10;
+	}
+
+	return byte_size;
+}
+
 int main(int argc, char *argv[])
 {
 	int c;
@@ -574,7 +591,7 @@ int main(int argc, char *argv[])
 			break;
 		}
 		case 'c':
-			ui.cluster_size = atoi(optarg) * KB;
+			ui.cluster_size = parse_cluster_size(optarg);
 			if (ui.cluster_size > EXFAT_MAX_CLUSTER_SIZE) {
 				exfat_msg(EXFAT_ERROR,
 					"cluster size(%d) exceeds max cluster size(%d)\n",

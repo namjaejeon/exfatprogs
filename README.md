@@ -33,8 +33,10 @@ Build steps:
 Usage example:
 	1. No option(default) : cluster size adjustment as per device size, quick format.
 		mkfs.exfat /dev/sda1
-	2. To change cluster size(KB) user want
-		mkfs.exfat -c 128 /dev/sda1
+	2. To change cluster size(KB or MB or Byte) user want
+		mkfs.exfat -c 1048576 /dev/sda1
+		mkfs.exfat -c 1024K /dev/sda1
+		mkfs.exfat -c 1M /dev/sda1
 	3. For full format(zero out)
 		mkfs.exfat -f /dev/sda1
 	4. For set volume label, use -l option with string user want.
