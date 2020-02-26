@@ -42,6 +42,11 @@ Usage example:
 	4. For set volume label, use -l option with string user want.
 		mkfs.exfat -l "my usb" /dev/sda1
 
-- fsck.exfat(Preparing):
+- fsck.exfat:
 	Check the consistency of your exfat filesystem and optinally repair a corrupted device formatted by exfat.
+
+Usage example:
+	1. check the consistency.
+		fsck.exfat /dev/sda1
+	2. repair and fix.(preparing)
 ```
