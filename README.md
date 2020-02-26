@@ -1,6 +1,6 @@
 
-## exfat-utils ?
-Exfat-utils is mkfs(format)/fsck(repair) implementation for exfat filesystem under GNU GPL version 2.
+## exfat-utils
+exfat-utils is mkfs(format)/fsck(repair) implementation for exfat filesystem under GNU GPL version 2.
 
 ## Maintainers
 * Namjae Jeon <linkinjeon@gmail.com>
@@ -33,13 +33,20 @@ Build steps:
 Usage example:
 	1. No option(default) : cluster size adjustment as per device size, quick format.
 		mkfs.exfat /dev/sda1
-	2. To change cluster size(KB) user want
-		mkfs.exfat -c 128 /dev/sda1
+	2. To change cluster size(KB or MB or Byte) user want
+		mkfs.exfat -c 1048576 /dev/sda1
+		mkfs.exfat -c 1024K /dev/sda1
+		mkfs.exfat -c 1M /dev/sda1
 	3. For full format(zero out)
 		mkfs.exfat -f /dev/sda1
 	4. For set volume label, use -l option with string user want.
 		mkfs.exfat -l "my usb" /dev/sda1
 
-- fsck.exfat(Preparing):
+- fsck.exfat:
 	Check the consistency of your exfat filesystem and optinally repair a corrupted device formatted by exfat.
+
+Usage example:
+	1. check the consistency.
+		fsck.exfat /dev/sda1
+	2. repair and fix.(preparing)
 ```
