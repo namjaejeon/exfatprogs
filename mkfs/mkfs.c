@@ -499,7 +499,7 @@ static int make_exfat(struct exfat_blk_dev *bd, struct exfat_user_input *ui)
 	int ret;
 
 	exfat_msg(EXFAT_INFO,
-		"Creating exFAT filesystem(%s) with %u cluster size\n\n",
+		"Creating exFAT filesystem(%s, cluster size=%u)\n\n",
 		ui->dev_name, ui->cluster_size);
 
 	exfat_msg(EXFAT_INFO, "Writing volume boot record: ");
