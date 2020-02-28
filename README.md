@@ -1,6 +1,6 @@
 
-## exfat-utils ?
-Exfat-utils is mkfs(format)/fsck(repair) implementation for exfat filesystem under GNU GPL version 2.
+## exfat-utils
+exfat-utils is mkfs(format)/fsck(repair) implementation for exfat filesystem under GNU GPL version 2.
 
 ## Maintainers
 * Namjae Jeon <linkinjeon@gmail.com>

@@ -499,7 +499,7 @@ static int make_exfat(struct exfat_blk_dev *bd, struct exfat_user_input *ui)
 	int ret;
 
 	exfat_msg(EXFAT_INFO,
-		"Creating exFAT filesystem(%s) with %u cluster size\n\n",
+		"Creating exFAT filesystem(%s, cluster size=%u)\n\n",
 		ui->dev_name, ui->cluster_size);
 
 	exfat_msg(EXFAT_INFO, "Writing volume boot record: ");
@@ -554,6 +554,10 @@ static long long parse_cluster_size(const char *size)
 	case 'K':
 	case 'k':
 		byte_size <<= 10;
+		break;
+	default:
+		exfat_msg(EXFAT_ERROR, "Wrong unit input('%c') for cluster size\n", *data_unit);
+		return -EINVAL;
 	}
 
 	return byte_size;
@@ -591,13 +595,16 @@ int main(int argc, char *argv[])
 			break;
 		}
 		case 'c':
-			ui.cluster_size = parse_cluster_size(optarg);
-			if (ui.cluster_size > EXFAT_MAX_CLUSTER_SIZE) {
+			ret = parse_cluster_size(optarg);
+			if (ret < 0)
+				goto out;
+			else if (ret > EXFAT_MAX_CLUSTER_SIZE) {
 				exfat_msg(EXFAT_ERROR,
 					"cluster size(%d) exceeds max cluster size(%d)\n",
 					ui.cluster_size, EXFAT_MAX_CLUSTER_SIZE);
 				goto out;
 			}
+			ui.cluster_size = ret;
 			break;
 		case 'f':
 			ui.quick = false;
