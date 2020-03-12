@@ -1111,7 +1111,7 @@ err:
 static bool exfat_filesystem_check(struct exfat *exfat)
 {
 	struct exfat_inode *dir;
-	int ret;
+	bool ret = true;
 
 	if (!exfat->root) {
 		exfat_err("root is NULL\n");
@@ -1125,6 +1125,7 @@ static bool exfat_filesystem_check(struct exfat *exfat)
 
 		if (!(dir->attr & ATTR_SUBDIR)) {
 			resolve_path(&path_resolve_ctx, dir);
+			ret = false;
 			exfat_err("failed to travel directories. "
 					"the node is not directory: %s\n",
 					path_resolve_ctx.utf8_path);
@@ -1133,6 +1134,7 @@ static bool exfat_filesystem_check(struct exfat *exfat)
 
 		if (read_children(exfat, dir)) {
 			resolve_path(&path_resolve_ctx, dir);
+			ret = false;
 			exfat_err("failed to check dentries: %s\n",
 					path_resolve_ctx.utf8_path);
 			goto out;
@@ -1145,7 +1147,7 @@ static bool exfat_filesystem_check(struct exfat *exfat)
 out:
 	exfat_free_dir_list(exfat);
 	exfat->root = NULL;
-	return false;
+	return ret;
 }
 
 static bool exfat_root_dir_check(struct exfat *exfat)
@@ -1289,9 +1291,8 @@ int main(int argc, char * const argv[])
 	}
 
 	exfat_debug("verifying directory entries...\n");
-	ret = exfat_filesystem_check(exfat);
-	if (ret) {
-		exfat_err("failed to verify directory entries. %d\n", ret);
+	if (!exfat_filesystem_check(exfat)) {
+		exfat_err("failed to verify directory entries.\n");
 		ret = FSCK_EXIT_ERRORS_LEFT;
 		goto out;
 	}
