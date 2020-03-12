@@ -22,6 +22,8 @@ struct fsck_user_input {
 	enum fsck_ui_options		options;
 };
 
+#define EXFAT_MAX_UPCASE_CHARS	0x10000
+
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 typedef __u32	bitmap_t;
 #elif __BYTE_ORDER == __BIG_ENDIAN
@@ -958,6 +960,60 @@ static bool read_alloc_bitmap(struct exfat_de_iter *iter)
 	return true;
 }
 
+static bool read_upcase_table(struct exfat_de_iter *iter)
+{
+	struct exfat_dentry *dentry;
+	struct exfat *exfat;
+	size_t size;
+	__le16 *upcase;
+	__le32 checksum;
+
+	exfat = iter->exfat;
+
+	if (exfat_de_iter_get(iter, 0, &dentry))
+		return false;
+
+	if (exfat_invalid_clus(exfat, le32_to_cpu(dentry->upcase_start_clu))) {
+		exfat_err("invalid start cluster of upcase table. 0x%x\n",
+			le32_to_cpu(dentry->upcase_start_clu));
+		return false;
+	}
+
+	size = (size_t)le64_to_cpu(dentry->upcase_size);
+	if (size > EXFAT_MAX_UPCASE_CHARS * sizeof(__le16) ||
+			size == 0 || size % sizeof(__le16)) {
+		exfat_err("invalid size of upcase table. 0x%llx\n",
+			le64_to_cpu(dentry->upcase_size));
+		return false;
+	}
+
+	upcase = (__le16 *)malloc(size);
+	if (!upcase) {
+		exfat_err("failed to allocate upcase table\n");
+		return false;
+	}
+
+	if (exfat_read(exfat->blk_dev->dev_fd, upcase, size,
+			exfat_c2o(exfat,
+			le32_to_cpu(dentry->upcase_start_clu))) != size) {
+		exfat_err("failed to read upcase table\n");
+		free(upcase);
+		return false;
+	}
+
+	checksum = 0;
+	boot_calc_checksum((unsigned char *)upcase, size, false, &checksum);
+	if (le32_to_cpu(dentry->upcase_checksum) == checksum) {
+		exfat_err("corrupted upcase table %#x (expected: %#x)\n",
+			checksum, le32_to_cpu(dentry->upcase_checksum));
+		free(upcase);
+		return false;
+	}
+
+	free(upcase);
+	return true;
+}
+
 static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 {
 	int ret;
@@ -1005,6 +1061,7 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 		case EXFAT_VOLUME:
 			if (!read_volume_label(de_iter)) {
 				exfat_err("failed to verify volume label\n");
+				ret = -EINVAL;
 				goto err;
 			}
 			break;
@@ -1012,10 +1069,17 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 			if (!read_alloc_bitmap(de_iter)) {
 				exfat_err(
 					"failed to verify allocation bitmap\n");
+				ret = -EINVAL;
 				goto err;
 			}
 			break;
 		case EXFAT_UPCASE:
+			if (!read_upcase_table(de_iter)) {
+				exfat_err(
+					"failed to verify upcase table\n");
+				ret = -EINVAL;
+				goto err;
+			}
 			break;
 		default:
 			if (IS_EXFAT_DELETED(dentry->type) ||
