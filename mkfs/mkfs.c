@@ -394,12 +394,12 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 static void usage(void)
 {
 	fprintf(stderr, "Usage: mkfs.exfat\n");
-	fprintf(stderr, "\t-l=string | --volume-label=string	Set volume label\n");
-	fprintf(stderr, "\t-c=KB size | --cluster-size=KB size	Set cluster size\n");
-	fprintf(stderr, "\t-f | --full-format			Full format\n");
-	fprintf(stderr, "\t-V | --version			Show version\n");
-	fprintf(stderr, "\t-v | --verbose			Print debug\n");
-	fprintf(stderr, "\t-h | --help				Show help\n");
+	fprintf(stderr, "\t-l string | --volume-label=string    Set volume label\n");
+	fprintf(stderr, "\t-c KB size | --cluster-size=KB size  Set cluster size\n");
+	fprintf(stderr, "\t-f | --full-format                   Full format\n");
+	fprintf(stderr, "\t-V | --version                       Show version\n");
+	fprintf(stderr, "\t-v | --verbose                       Print debug\n");
+	fprintf(stderr, "\t-h | --help                          Show help\n");
 
 	exit(EXIT_FAILURE);
 }
