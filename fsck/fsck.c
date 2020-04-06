@@ -1003,7 +1003,7 @@ static bool read_upcase_table(struct exfat_de_iter *iter)
 
 	checksum = 0;
 	boot_calc_checksum((unsigned char *)upcase, size, false, &checksum);
-	if (le32_to_cpu(dentry->upcase_checksum) == checksum) {
+	if (le32_to_cpu(dentry->upcase_checksum) != checksum) {
 		exfat_err("corrupted upcase table %#x (expected: %#x)\n",
 			checksum, le32_to_cpu(dentry->upcase_checksum));
 		free(upcase);
