@@ -621,14 +621,14 @@ int main(int argc, char *argv[])
 			usage();
 	}
 
+	show_version();
+	if (version_only)
+		exit(EXIT_FAILURE);
+
 	if (argc - optind != 1) {
 		exfat_iconv_close(&exfat_iconv);
 		usage();
 	}
-
-	show_version();
-	if (version_only)
-		exit(EXIT_FAILURE);
 
 	memset(ui.dev_name, 0, 255);
 	strncpy(ui.dev_name, argv[optind], 255);
