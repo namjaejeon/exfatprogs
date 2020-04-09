@@ -1,0 +1,12 @@
+// Copyright 2020 The Android Open Source Project
+
+cc_binary {
+    name: "mkfs.exfat",
+
+    srcs: [
+        "mkfs.c",
+        "upcase.c",
+    ],
+    defaults: ["exfat-utils-defaults"],
+    static_libs: ["libexfat"],
+}
