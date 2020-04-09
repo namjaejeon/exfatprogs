@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+/*
+ *  Copyright (C) 2020 Hyunchul Lee <hyc.lee@gmail.com>
+ */
 #include <stdio.h>
 #include <string.h>
 
