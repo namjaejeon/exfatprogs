@@ -1248,12 +1248,12 @@ int main(int argc, char * const argv[])
 		}
 	}
 
-	if (optind != argc - 1)
-		usage(argv[0]);
-
 	show_version();
 	if (version_only)
 		exit(FSCK_EXIT_SYNTAX_ERROR);
+
+	if (optind != argc - 1)
+		usage(argv[0]);
 
 	if (exfat_iconv_open(&exfat_iconv) < 0) {
 		exfat_err("failed to init iconv\n");

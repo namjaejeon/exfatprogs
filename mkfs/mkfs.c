@@ -395,7 +395,7 @@ static void usage(void)
 {
 	fprintf(stderr, "Usage: mkfs.exfat\n");
 	fprintf(stderr, "\t-l string | --volume-label=string    Set volume label\n");
-	fprintf(stderr, "\t-c KB size | --cluster-size=KB size  Set cluster size\n");
+	fprintf(stderr, "\t-c | --cluster-size			Set cluster size\n");
 	fprintf(stderr, "\t-f | --full-format                   Full format\n");
 	fprintf(stderr, "\t-V | --version                       Show version\n");
 	fprintf(stderr, "\t-v | --verbose                       Print debug\n");
@@ -621,14 +621,14 @@ int main(int argc, char *argv[])
 			usage();
 	}
 
+	show_version();
+	if (version_only)
+		exit(EXIT_FAILURE);
+
 	if (argc - optind != 1) {
 		exfat_iconv_close(&exfat_iconv);
 		usage();
 	}
-
-	show_version();
-	if (version_only)
-		exit(EXIT_FAILURE);
 
 	memset(ui.dev_name, 0, 255);
 	strncpy(ui.dev_name, argv[optind], 255);
