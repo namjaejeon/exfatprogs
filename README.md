@@ -6,8 +6,8 @@ exfat-utils is mkfs(format)/fsck(repair) implementation for exfat filesystem und
 * Namjae Jeon <linkinjeon@gmail.com>
 * Hyunchul Lee <hyc.lee@gmail.com>
 
-## Buidling exfat-utils
-Install preprequisite packages:
+## Building exfat-utils
+Install prerequisite packages:
 ```
 	For Ubuntu:
 	sudo apt-get install autoconf libtool pkg-config
@@ -43,7 +43,7 @@ Usage example:
 		mkfs.exfat -l "my usb" /dev/sda1
 
 - fsck.exfat:
-	Check the consistency of your exfat filesystem and optinally repair a corrupted device formatted by exfat.
+	Check the consistency of your exfat filesystem and optionally repair a corrupted device formatted by exfat.
 
 Usage example:
 	1. check the consistency.
