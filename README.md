@@ -9,10 +9,10 @@ exfat-utils is mkfs(format)/fsck(repair) implementation for exfat filesystem und
 ## Building exfat-utils
 Install prerequisite packages:
 ```
-	For Ubuntu:
+For Ubuntu:
 	sudo apt-get install autoconf libtool pkg-config
 
-	For Fedora, RHEL:
+For Fedora, RHEL:
 	sudo yum install autoconf automake libtool
 ```
 
