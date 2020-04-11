@@ -825,7 +825,7 @@ static int read_file_dentries(struct exfat_de_iter *iter,
 	}
 
 	checksum = file_calc_checksum(iter);
-	if (file_de->file_checksum != checksum) {
+	if (le16_to_cpu(file_de->file_checksum) != checksum) {
 		exfat_err("invalid checksum. 0x%x != 0x%x\n",
 			le16_to_cpu(file_de->file_checksum),
 			le16_to_cpu(checksum));
@@ -920,6 +920,10 @@ static bool read_alloc_bitmap(struct exfat_de_iter *iter)
 	if (exfat_de_iter_get(iter, 0, &dentry))
 		return false;
 
+	exfat_debug("start cluster %#x, size %#llx\n",
+			le32_to_cpu(dentry->bitmap_start_clu),
+			le64_to_cpu(dentry->bitmap_size));
+
 	exfat->bit_count = le32_to_cpu(exfat->bs->bsx.clu_count);
 
 	if (le64_to_cpu(dentry->bitmap_size) <
@@ -933,10 +937,6 @@ static bool read_alloc_bitmap(struct exfat_de_iter *iter)
 				le32_to_cpu(dentry->bitmap_start_clu));
 		return false;
 	}
-
-	exfat_debug("start cluster %#x, size %#llx\n",
-			le32_to_cpu(dentry->bitmap_start_clu),
-			le64_to_cpu(dentry->bitmap_size));
 
 	/* TODO: bitmap could be very large. */
 	alloc_bitmap_size = EXFAT_BITMAP_SIZE(exfat->bit_count);
@@ -1183,9 +1183,9 @@ err:
 void exfat_show_info(struct exfat *exfat)
 {
 	exfat_info("Bytes per sector: %d\n",
-			1 << le32_to_cpu(exfat->bs->bsx.sect_size_bits));
+			1 << exfat->bs->bsx.sect_size_bits);
 	exfat_info("Sectors per cluster: %d\n",
-			1 << le32_to_cpu(exfat->bs->bsx.sect_per_clus_bits));
+			1 << exfat->bs->bsx.sect_per_clus_bits);
 	exfat_info("Cluster heap count: %d(0x%x)\n",
 			le32_to_cpu(exfat->bs->bsx.clu_count),
 			le32_to_cpu(exfat->bs->bsx.clu_count));
