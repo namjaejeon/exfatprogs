@@ -488,6 +488,7 @@ static int exfat_zero_out_disk(struct exfat_blk_dev *bd,
 		total_written += nbytes;
 	} while (total_written <= size);
 
+	free(buf);
 	exfat_msg(EXFAT_DEBUG,
 		"zero out written size : %llu, disk size : %llu\n",
 		total_written, bd->size);
@@ -581,8 +582,13 @@ int main(int argc, char *argv[])
 	}
 
 	opterr = 0;
-	while ((c = getopt_long(argc, argv, "l:c:fVvh", opts, NULL)) != EOF)
+	while ((c = getopt_long(argc, argv, "n:l:c:fVvh", opts, NULL)) != EOF)
 		switch (c) {
+		/*
+		 * Make 'n' option fallthrough to 'l' option for for backward
+		 * compatibility with old utils.
+		 */
+		case 'n':
 		case 'l':
 		{
 			ret = exfat_iconv_enc(&exfat_iconv, optarg,
