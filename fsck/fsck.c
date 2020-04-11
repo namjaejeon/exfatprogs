@@ -825,7 +825,7 @@ static int read_file_dentries(struct exfat_de_iter *iter,
 	}
 
 	checksum = file_calc_checksum(iter);
-	if (file_de->file_checksum != checksum) {
+	if (le16_to_cpu(file_de->file_checksum) != checksum) {
 		exfat_err("invalid checksum. 0x%x != 0x%x\n",
 			le16_to_cpu(file_de->file_checksum),
 			le16_to_cpu(checksum));
