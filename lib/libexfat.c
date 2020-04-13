@@ -28,6 +28,8 @@
 #define BIT_MASK(nr)            ((1) << ((nr) % 32))
 #define BIT_WORD(nr)            ((nr) / 32)
 
+unsigned int print_level  = EXFAT_INFO;
+
 static inline void set_bit(int nr, unsigned int *addr)
 {
 	unsigned long mask = BIT_MASK(nr);
@@ -57,9 +59,8 @@ static inline void clear_bit_le(int nr, void *addr)
 void exfat_set_bit(struct exfat_blk_dev *bd, char *bitmap,
 		unsigned int clu)
 {
-	int i, b;
+	int b;
 
-	i = clu >> (bd->sector_size_bits + 3);
 	b = clu & ((bd->sector_size << 3) - 1);
 
 	set_bit_le(b, bitmap);
@@ -68,9 +69,8 @@ void exfat_set_bit(struct exfat_blk_dev *bd, char *bitmap,
 void exfat_clear_bit(struct exfat_blk_dev *bd, char *bitmap,
 		unsigned int clu)
 {
-	int i, b;
+	int b;
 
-	i = clu >> (bd->sector_size_bits + 3);
 	b = clu & ((bd->sector_size << 3) - 1);
 
 	clear_bit_le(b, bitmap);

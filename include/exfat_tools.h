@@ -80,7 +80,7 @@ ssize_t exfat_utf16_dec(const __u16 *in_str, size_t in_len,
  * Exfat Print
  */
 
-static unsigned int print_level = 1;
+extern unsigned int print_level;
 
 #define EXFAT_ERROR	(0)
 #define EXFAT_INFO	(1)

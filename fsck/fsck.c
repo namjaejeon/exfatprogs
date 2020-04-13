@@ -154,7 +154,7 @@ static void inode_free_file_children(struct exfat_inode *dir)
  */
 static void inode_free_ancestors(struct exfat_inode *child)
 {
-	struct exfat_inode *parent, *node;
+	struct exfat_inode *parent;
 
 	if (!list_empty(&child->children))
 		return;
@@ -201,7 +201,7 @@ static void free_exfat(struct exfat *exfat)
 
 static void exfat_free_dir_list(struct exfat *exfat)
 {
-	struct exfat_inode *dir, *file, *i, *k;
+	struct exfat_inode *dir, *i;
 
 	list_for_each_entry_safe(dir, i, &exfat->dir_list, list) {
 		inode_free_file_children(dir);
@@ -306,7 +306,7 @@ static off_t exfat_s2o(struct exfat *exfat, off_t sect)
 static off_t exfat_c2o(struct exfat *exfat, unsigned int clus)
 {
 	if (clus < EXFAT_FIRST_CLUSTER)
-		return ~0ULL;
+		return ~0L;
 
 	return exfat_s2o(exfat, le32_to_cpu(exfat->bs->bsx.clu_offset) +
 				((clus - EXFAT_FIRST_CLUSTER) <<
@@ -352,7 +352,7 @@ static ssize_t exfat_file_read(struct exfat *exfat, struct exfat_inode *node,
 			return -EIO;
 
 		clus_offset = 0;
-		buf += read_size;
+		buf = (char *)buf + read_size;
 		remain_size -= read_size;
 		if (remain_size == 0)
 			return total_size;
@@ -429,7 +429,7 @@ static bool exfat_boot_region_check(struct exfat *exfat)
 
 	ret = exfat_read(exfat->blk_dev->dev_fd, bs, sizeof(*bs), 0);
 	if (ret != sizeof(*bs)) {
-		exfat_err("failed to read a boot sector. %ld\n", ret);
+		exfat_err("failed to read a boot sector. %zd\n", ret);
 		goto err;
 	}
 
@@ -451,7 +451,7 @@ static bool exfat_boot_region_check(struct exfat *exfat)
 
 	ret = boot_region_checksum(exfat);
 	if (ret) {
-		exfat_err("failed to verify the checksum of a boot region. %ld\n",
+		exfat_err("failed to verify the checksum of a boot region. %zd\n",
 			ret);
 		goto err;
 	}
@@ -542,9 +542,8 @@ bool get_ancestors(struct exfat_inode *child,
 
 static int resolve_path(struct path_resolve_ctx *ctx, struct exfat_inode *child)
 {
-	int ret = 0;
 	int depth, i;
-	int name_len, path_len;
+	int name_len;
 	__le16 *utf16_path;
 	const __le16 utf16_slash = cpu_to_le16(0x002F);
 	size_t in_size;
@@ -625,8 +624,8 @@ int exfat_de_iter_get(struct exfat_de_iter *iter,
 					int ith, struct exfat_dentry **dentry)
 {
 	off_t de_next_file_offset;
-	int de_offset, de_next_offset;
-	bool need_read_1_clus = false, need_read_2_clus = false;
+	int de_next_offset;
+	bool need_read_1_clus = false;
 	int ret;
 
 	de_next_file_offset = iter->de_file_offset +
@@ -645,7 +644,6 @@ int exfat_de_iter_get(struct exfat_de_iter *iter,
 		iter->read_size * 2)
 		return -ERANGE;
 
-	de_offset = iter->de_file_offset % (iter->read_size * 2);
 	de_next_offset = de_next_file_offset % (iter->read_size * 2);
 
 	/* read a cluster if needed */
@@ -653,7 +651,6 @@ int exfat_de_iter_get(struct exfat_de_iter *iter,
 		void *buf;
 
 		need_read_1_clus = de_next_offset < iter->read_size;
-		need_read_2_clus = de_next_offset >= iter->read_size;
 		buf = need_read_1_clus ?
 			iter->dentries : iter->dentries + iter->read_size;
 
@@ -698,7 +695,6 @@ off_t exfat_de_iter_file_offset(struct exfat_de_iter *iter)
 static bool check_inode(struct exfat *exfat, struct exfat_inode *parent,
 						struct exfat_inode *node)
 {
-	int clus_count;
 	bool ret = false;
 
 	if (node->size == 0 && node->first_clus != EXFAT_FREE_CLUSTER) {
@@ -1096,7 +1092,6 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 
 		exfat_de_iter_advance(de_iter, dentry_count);
 	}
-out:
 	list_splice(&sub_dir_list, &exfat->dir_list);
 	return 0;
 err:
@@ -1157,7 +1152,6 @@ out:
 static bool exfat_root_dir_check(struct exfat *exfat)
 {
 	struct exfat_inode *root;
-	int ret;
 	clus_t clus_count;
 
 	root = alloc_exfat_inode(ATTR_SUBDIR);
@@ -1168,8 +1162,7 @@ static bool exfat_root_dir_check(struct exfat *exfat)
 
 	root->first_clus = le32_to_cpu(exfat->bs->bsx.root_cluster);
 	if (!inode_get_clus_count(exfat, root, &clus_count)) {
-		exfat_err("failed to follow the cluster chain of root. %d\n",
-			ret);
+		exfat_err("failed to follow the cluster chain of root\n");
 		goto err;
 	}
 	root->size = clus_count * EXFAT_CLUSTER_SIZE(exfat->bs);
@@ -1197,7 +1190,7 @@ void exfat_show_info(struct exfat *exfat)
 			le32_to_cpu(exfat->bs->bsx.clu_offset));
 }
 
-void exfat_show_stat(struct exfat *exfat)
+void exfat_show_stat(void)
 {
 	exfat_debug("Found directories: %ld\n", exfat_stat.dir_count);
 	exfat_debug("Found files: %ld\n", exfat_stat.file_count);
@@ -1304,7 +1297,7 @@ int main(int argc, char * const argv[])
 	printf("%s: clean\n", ui.ei.dev_name);
 	ret = FSCK_EXIT_NO_ERRORS;
 out:
-	exfat_show_stat(exfat);
+	exfat_show_stat();
 err:
 	free_exfat(exfat);
 	close(bd.dev_fd);

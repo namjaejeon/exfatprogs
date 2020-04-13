@@ -152,7 +152,6 @@ static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
 			false, checksum);
 	}
 
-out:
 	return 0;
 }
 
@@ -286,7 +285,7 @@ static int write_fat_entries(struct exfat_user_input *ui, int fd,
 static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
-	int ret, clu, count;
+	int ret, clu;
 
 	/* fat entry 0 should be media type field(0xF8) */
 	ret = write_fat_entry(bd->dev_fd, cpu_to_le32(0xfffffff8), 0);
@@ -327,8 +326,7 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 	return ret;
 }
 
-static int exfat_create_bitmap(struct exfat_blk_dev *bd,
-		struct exfat_user_input *ui)
+static int exfat_create_bitmap(struct exfat_blk_dev *bd)
 {
 	char *bitmap;
 	int i, nbytes;
@@ -357,7 +355,7 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 {
 	struct exfat_dentry ed[3];
 	int dentries_len = sizeof(struct exfat_dentry) * 3;
-	int nbytes, vol_len;
+	int nbytes;
 
 	/* Set volume label entry */
 	ed[0].type = EXFAT_VOLUME;
@@ -521,13 +519,13 @@ static int make_exfat(struct exfat_blk_dev *bd, struct exfat_user_input *ui)
 		return ret;
 
 	exfat_msg(EXFAT_INFO, "Allocation bitmap creation: ");
-	ret = exfat_create_bitmap(bd, ui);
+	ret = exfat_create_bitmap(bd);
 	exfat_msg(EXFAT_INFO, "%s\n", ret ? "failed" : "done");
 	if (ret)
 		return ret;
 
 	exfat_msg(EXFAT_INFO, "Upcate table creation: ");
-	ret = exfat_create_upcase_table(bd, ui);
+	ret = exfat_create_upcase_table(bd);
 	exfat_msg(EXFAT_INFO, "%s\n", ret ? "failed" : "done");
 	if (ret)
 		return ret;
@@ -566,7 +564,6 @@ int main(int argc, char *argv[])
 {
 	int c;
 	int ret = EXIT_FAILURE;
-	char *blk_dev_name;
 	struct exfat_blk_dev bd;
 	struct exfat_user_input ui;
 	bool version_only = false;
