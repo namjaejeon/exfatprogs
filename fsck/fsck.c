@@ -24,12 +24,10 @@ struct fsck_user_input {
 
 #define EXFAT_MAX_UPCASE_CHARS	0x10000
 
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-typedef __u32	bitmap_t;
-#elif __BYTE_ORDER == __BIG_ENDIAN
+#ifdef WORDS_BIGENDIAN
 typedef __u8	bitmap_t;
 #else
-#error "__BYTE_ORDER is not defined"
+typedef __u32	bitmap_t;
 #endif
 
 #define BITS_PER	(sizeof(bitmap_t) * 8)

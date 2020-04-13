@@ -19,10 +19,10 @@
 #include "exfat_tools.h"
 #include "mkfs.h"
 
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-#define BITOP_LE_SWIZZLE        0
-#else
+#ifdef WORDS_BIGENDIAN
 #define BITOP_LE_SWIZZLE	(~0x7)
+#else
+#define BITOP_LE_SWIZZLE        0
 #endif
 
 #define BIT_MASK(nr)            ((1) << ((nr) % 32))
