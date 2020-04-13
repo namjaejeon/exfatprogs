@@ -152,7 +152,6 @@ static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
 			false, checksum);
 	}
 
-out:
 	return 0;
 }
 
