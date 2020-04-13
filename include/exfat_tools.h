@@ -54,7 +54,7 @@ struct exfat_user_input {
 	unsigned int cluster_size;
 	unsigned int sec_per_clu;
 	bool quick;
-	char volume_label[22];
+	__u16 volume_label[11];
 	int volume_label_len;
 };
 
@@ -71,6 +71,10 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 		struct exfat_blk_dev *bd);
 ssize_t exfat_read(int fd, void *buf, size_t size, off_t offset);
 ssize_t exfat_write(int fd, void *buf, size_t size, off_t offset);
+
+ssize_t exfat_utf16_enc(const char *in_str, __u16 *out_str, size_t out_size);
+ssize_t exfat_utf16_dec(const __u16 *in_str, size_t in_len,
+			char *out_str, size_t out_size);
 
 /*
  * Exfat Print

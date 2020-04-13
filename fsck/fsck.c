@@ -10,10 +10,10 @@
 #include <getopt.h>
 #include <string.h>
 #include <errno.h>
+#include <locale.h>
 
 #include "exfat_ondisk.h"
 #include "exfat_tools.h"
-#include "exfat_iconv.h"
 #include "fsck.h"
 #include "repair.h"
 
@@ -61,13 +61,12 @@ struct exfat_stat {
 
 struct path_resolve_ctx {
 	struct exfat_inode	*ancestors[255];
-	__le16			utf16_path[sizeof(__le16) * (PATH_MAX + 2)];
-	char			utf8_path[PATH_MAX * 3 + 1];
+	__le16			utf16_path[PATH_MAX + 2];
+	char			local_path[PATH_MAX * MB_LEN_MAX + 1];
 };
 
 struct exfat_stat exfat_stat;
 struct path_resolve_ctx path_resolve_ctx;
-struct exfat_iconv exfat_iconv;
 
 static struct option opts[] = {
 	{"repair",	no_argument,	NULL,	'r' },
@@ -491,6 +490,15 @@ err:
 	return false;
 }
 
+static size_t utf16_len(const __le16 *str, size_t max_size)
+{
+	size_t i = 0;
+
+	while (le16_to_cpu(str[i]) && i < max_size)
+		i++;
+	return i;
+}
+
 /*
  * get references of ancestors that include @child until the count of
  * ancesters is not larger than @count and the count of characters of
@@ -512,8 +520,7 @@ bool get_ancestors(struct exfat_inode *child,
 
 	dir = child;
 	while (dir) {
-		name_len = exfat_iconv_encstr_len((char *)dir->name,
-						NAME_BUFFER_SIZE);
+		name_len = utf16_len(dir->name, NAME_BUFFER_SIZE);
 		if (char_len + name_len > max_char_len)
 			break;
 
@@ -539,9 +546,10 @@ static int resolve_path(struct path_resolve_ctx *ctx, struct exfat_inode *child)
 	int depth, i;
 	int name_len, path_len;
 	__le16 *utf16_path;
+	const __le16 utf16_slash = cpu_to_le16(0x002F);
 	size_t in_size;
 
-	ctx->utf8_path[0] = '\0';
+	ctx->local_path[0] = '\0';
 
 	get_ancestors(child,
 			ctx->ancestors,
@@ -551,22 +559,19 @@ static int resolve_path(struct path_resolve_ctx *ctx, struct exfat_inode *child)
 
 	utf16_path = ctx->utf16_path;
 	for (i = 0; i < depth; i++) {
-		name_len = exfat_iconv_encstr_len(
-				(char *)ctx->ancestors[i]->name,
-				NAME_BUFFER_SIZE);
+		name_len = utf16_len(ctx->ancestors[i]->name, NAME_BUFFER_SIZE);
 		memcpy((char *)utf16_path, (char *)ctx->ancestors[i]->name,
 				name_len * 2);
 		utf16_path += name_len;
-		memcpy((char *)utf16_path, u"/", 2);
+		memcpy((char *)utf16_path, &utf16_slash, sizeof(utf16_slash));
 		utf16_path++;
 	}
 
 	if (depth > 0)
 		utf16_path--;
 	in_size = (utf16_path - ctx->utf16_path) * sizeof(__le16);
-	return exfat_iconv_dec(&exfat_iconv,
-			(char *)ctx->utf16_path, in_size,
-			(char *)ctx->utf8_path, sizeof(ctx->utf8_path));
+	return exfat_utf16_dec(ctx->utf16_path, in_size,
+				ctx->local_path, sizeof(ctx->local_path));
 }
 
 static int resolve_path_parent(struct path_resolve_ctx *ctx,
@@ -699,14 +704,14 @@ static bool check_inode(struct exfat *exfat, struct exfat_inode *parent,
 	if (node->size == 0 && node->first_clus != EXFAT_FREE_CLUSTER) {
 		resolve_path_parent(&path_resolve_ctx, parent, node);
 		exfat_err("file is empty, but first cluster is %#x: %s\n",
-				node->first_clus, path_resolve_ctx.utf8_path);
+				node->first_clus, path_resolve_ctx.local_path);
 		ret = false;
 	}
 
 	if (node->size > 0 && exfat_invalid_clus(exfat, node->first_clus)) {
 		resolve_path_parent(&path_resolve_ctx, parent, node);
 		exfat_err("first cluster %#x is invalid: %s\n",
-				node->first_clus, path_resolve_ctx.utf8_path);
+				node->first_clus, path_resolve_ctx.local_path);
 		ret = false;
 	}
 
@@ -714,14 +719,14 @@ static bool check_inode(struct exfat *exfat, struct exfat_inode *parent,
 				EXFAT_CLUSTER_SIZE(exfat->bs)) {
 		resolve_path_parent(&path_resolve_ctx, parent, node);
 		exfat_err("size %llu is greater than cluster heap: %s\n",
-				node->size, path_resolve_ctx.utf8_path);
+				node->size, path_resolve_ctx.local_path);
 		ret = false;
 	}
 
 	if (node->size == 0 && node->is_contiguous) {
 		resolve_path_parent(&path_resolve_ctx, parent, node);
 		exfat_err("empty, but marked as contiguous: %s\n",
-					path_resolve_ctx.utf8_path);
+					path_resolve_ctx.local_path);
 		ret = false;
 	}
 
@@ -730,14 +735,14 @@ static bool check_inode(struct exfat *exfat, struct exfat_inode *parent,
 		resolve_path_parent(&path_resolve_ctx, parent, node);
 		exfat_err("directory size %llu is not divisible by %d: %s\n",
 				node->size, EXFAT_CLUSTER_SIZE(exfat->bs),
-				path_resolve_ctx.utf8_path);
+				path_resolve_ctx.local_path);
 		ret = false;
 	}
 
 	if (!node->is_contiguous && !inode_check_clus_chain(exfat, node)) {
 		resolve_path_parent(&path_resolve_ctx, parent, node);
 		exfat_err("corrupted cluster chain: %s\n",
-				path_resolve_ctx.utf8_path);
+				path_resolve_ctx.local_path);
 		ret = false;
 	}
 
@@ -842,7 +847,7 @@ static int read_file_dentries(struct exfat_de_iter *iter,
 		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
 		exfat_err("valid size %llu greater than size %llu: %s\n",
 			le64_to_cpu(stream_de->stream_valid_size), node->size,
-			path_resolve_ctx.utf8_path);
+			path_resolve_ctx.local_path);
 		goto err;
 	}
 
@@ -899,9 +904,8 @@ static bool read_volume_label(struct exfat_de_iter *iter)
 		return false;
 	}
 
-	if (exfat_iconv_dec(&exfat_iconv,
-		(char *)dentry->vol_label, sizeof(dentry->vol_label),
-		(char *)exfat->volume_label, sizeof(exfat->volume_label)) < 0) {
+	if (exfat_utf16_dec(dentry->vol_label, dentry->vol_char_cnt*2,
+		exfat->volume_label, sizeof(exfat->volume_label)) < 0) {
 		exfat_err("failed to decode volume label\n");
 		return false;
 	}
@@ -1128,7 +1132,7 @@ static bool exfat_filesystem_check(struct exfat *exfat)
 			ret = false;
 			exfat_err("failed to travel directories. "
 					"the node is not directory: %s\n",
-					path_resolve_ctx.utf8_path);
+					path_resolve_ctx.local_path);
 			goto out;
 		}
 
@@ -1136,7 +1140,7 @@ static bool exfat_filesystem_check(struct exfat *exfat)
 			resolve_path(&path_resolve_ctx, dir);
 			ret = false;
 			exfat_err("failed to check dentries: %s\n",
-					path_resolve_ctx.utf8_path);
+					path_resolve_ctx.local_path);
 			goto out;
 		}
 
@@ -1213,6 +1217,9 @@ int main(int argc, char * const argv[])
 
 	print_level = EXFAT_ERROR;
 
+	if (!setlocale(LC_CTYPE, ""))
+		exfat_err("failed to init locale/codeset\n");
+
 	opterr = 0;
 	while ((c = getopt_long(argc, argv, "rynVvh", opts, NULL)) != EOF) {
 		switch (c) {
@@ -1254,11 +1261,6 @@ int main(int argc, char * const argv[])
 
 	if (optind != argc - 1)
 		usage(argv[0]);
-
-	if (exfat_iconv_open(&exfat_iconv) < 0) {
-		exfat_err("failed to init iconv\n");
-		return FSCK_EXIT_OPERATION_ERROR;
-	}
 
 	strncpy(ui.ei.dev_name, argv[optind], sizeof(ui.ei.dev_name));
 	ret = exfat_get_blk_dev_info(&ui.ei, &bd);
@@ -1306,6 +1308,5 @@ out:
 err:
 	free_exfat(exfat);
 	close(bd.dev_fd);
-	exfat_iconv_close(&exfat_iconv);
 	return ret;
 }
