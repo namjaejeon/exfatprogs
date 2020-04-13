@@ -15,12 +15,11 @@
 #include <getopt.h>
 #include <errno.h>
 #include <math.h>
-#include <iconv.h>
+#include <locale.h>
 
 #include "exfat_ondisk.h"
 #include "exfat_tools.h"
 #include "mkfs.h"
-#include "exfat_iconv.h"
 
 struct exfat_mkfs_info finfo;
 
@@ -364,8 +363,7 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 	ed[0].type = EXFAT_VOLUME;
 	memset(ed[0].vol_label, 0, 22);
 	memcpy(ed[0].vol_label, ui->volume_label, ui->volume_label_len);
-	ed[0].vol_char_cnt = exfat_iconv_encstr_len(ui->volume_label,
-						ui->volume_label_len);
+	ed[0].vol_char_cnt = ui->volume_label_len/2;
 
 	/* Set bitmap entry */
 	ed[1].type = EXFAT_BITMAP;
@@ -572,14 +570,11 @@ int main(int argc, char *argv[])
 	struct exfat_blk_dev bd;
 	struct exfat_user_input ui;
 	bool version_only = false;
-	struct exfat_iconv exfat_iconv;
 
 	init_user_input(&ui);
 
-	if (exfat_iconv_open(&exfat_iconv) < 0) {
-		exfat_msg(EXFAT_ERROR, "failed to init iconv\n");
-		return EXIT_FAILURE;
-	}
+	if (!setlocale(LC_CTYPE, ""))
+		exfat_msg(EXFAT_ERROR, "failed to init locale/codeset\n");
 
 	opterr = 0;
 	while ((c = getopt_long(argc, argv, "n:l:c:fVvh", opts, NULL)) != EOF)
@@ -591,9 +586,8 @@ int main(int argc, char *argv[])
 		case 'n':
 		case 'l':
 		{
-			ret = exfat_iconv_enc(&exfat_iconv, optarg,
-					strlen(optarg), ui.volume_label,
-					sizeof(ui.volume_label));
+			ret = exfat_utf16_enc(optarg,
+				ui.volume_label, sizeof(ui.volume_label));
 			if (ret < 0)
 				goto out;
 
@@ -632,7 +626,6 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 
 	if (argc - optind != 1) {
-		exfat_iconv_close(&exfat_iconv);
 		usage();
 	}
 
@@ -662,7 +655,6 @@ out:
 		exfat_msg(EXFAT_INFO, "\nexFAT format complete!\n");
 	else
 		exfat_msg(EXFAT_INFO, "\nexFAT format fail!\n");
-	exfat_iconv_close(&exfat_iconv);
 	close(bd.dev_fd);
 	return ret;
 }
