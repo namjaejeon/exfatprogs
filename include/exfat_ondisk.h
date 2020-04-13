@@ -6,7 +6,6 @@
 #ifndef _EXFAT_H
 #define _EXFAT_H
 
-#include <endian.h>
 #include <stdint.h>
 #include <linux/fs.h>
 
@@ -14,17 +13,17 @@
 #include <config.h>
 #endif
 
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-#define cpu_to_le16(x)	(x)
-#define cpu_to_le32(x)	(x)
-#define cpu_to_le64(x)	(x)
-#else
+#ifdef WORDS_BIGENDIAN
 #define cpu_to_le16(x)	((((x) >> 8) & 0xffu) | (((x) & 0xffu) << 8))
 #define cpu_to_le32(x)	\
 	((((x) & 0xff000000u) >> 24) | (((x) & 0x00ff0000u) >>  8) | \
 	 (((x) & 0x0000ff00u) <<  8) | (((x) & 0x000000ffu) << 24))
 #define cpu_to_le64(x)	(cpu_to_le32((uint64_t)(x)) << 32 | \
 			cpu_to_le32((uint64_t)(x) >> 32))
+#else
+#define cpu_to_le16(x)	(x)
+#define cpu_to_le32(x)	(x)
+#define cpu_to_le64(x)	(x)
 #endif
 
 #define le64_to_cpu(x)  cpu_to_le64(x)
