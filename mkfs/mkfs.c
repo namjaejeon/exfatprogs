@@ -482,7 +482,7 @@ static int exfat_zero_out_disk(struct exfat_blk_dev *bd,
 			break;
 		}
 		total_written += nbytes;
-	} while (total_written <= size);
+	} while (total_written < size);
 
 	free(buf);
 	exfat_msg(EXFAT_DEBUG,
