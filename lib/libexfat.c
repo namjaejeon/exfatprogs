@@ -18,6 +18,7 @@
 #include "exfat_ondisk.h"
 #include "exfat_tools.h"
 #include "mkfs.h"
+#include "version.h"
 
 #ifdef WORDS_BIGENDIAN
 #define BITOP_LE_SWIZZLE	(~0x7)
