@@ -1253,7 +1253,7 @@ int main(int argc, char * const argv[])
 	if (optind != argc - 1)
 		usage(argv[0]);
 
-	strncpy(ui.ei.dev_name, argv[optind], sizeof(ui.ei.dev_name));
+	snprintf(ui.ei.dev_name, sizeof(ui.ei.dev_name), "%s", argv[optind]);
 	ret = exfat_get_blk_dev_info(&ui.ei, &bd);
 	if (ret < 0) {
 		exfat_err("failed to open %s. %d\n", ui.ei.dev_name, ret);
