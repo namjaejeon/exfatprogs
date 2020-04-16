@@ -1,7 +1,7 @@
 AC_PREREQ([2.68])
 
 AC_INIT([exfatprogs], [exfatprogs_version],
-	[linkinjeon@gmail.com])
+	[linkinjeon@kernel.org])
 
 AC_CONFIG_SRCDIR([config.h.in])
 AC_CONFIG_HEADER([config.h])

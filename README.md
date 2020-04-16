@@ -3,7 +3,7 @@
 exfatprogs is userspace utilities for exfat filesystem under GNU GPL version 2.
 
 ## Maintainers
-* Namjae Jeon <linkinjeon@gmail.com>
+* Namjae Jeon <linkinjeon@kernel.org>
 * Hyunchul Lee <hyc.lee@gmail.com>
 
 ## Building exfatprogs
