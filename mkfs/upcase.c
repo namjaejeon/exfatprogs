@@ -9,7 +9,7 @@
 #include <errno.h>
 
 #include "exfat_ondisk.h"
-#include "exfat_tools.h"
+#include "libexfat.h"
 #include "mkfs.h"
 
 static const unsigned char upcase_table[EXFAT_UPCASE_TABLE_SIZE] = {

@@ -18,7 +18,7 @@
 #include <locale.h>
 
 #include "exfat_ondisk.h"
-#include "exfat_tools.h"
+#include "libexfat.h"
 #include "mkfs.h"
 
 struct exfat_mkfs_info finfo;

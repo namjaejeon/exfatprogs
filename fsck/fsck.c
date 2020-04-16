@@ -13,7 +13,7 @@
 #include <locale.h>
 
 #include "exfat_ondisk.h"
-#include "exfat_tools.h"
+#include "libexfat.h"
 #include "fsck.h"
 #include "repair.h"
 

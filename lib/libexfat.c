@@ -16,7 +16,7 @@
 #include <limits.h>
 
 #include "exfat_ondisk.h"
-#include "exfat_tools.h"
+#include "libexfat.h"
 #include "mkfs.h"
 #include "version.h"
 
