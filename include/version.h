@@ -5,6 +5,6 @@
 
 #ifndef _VERSION_H
 
-#define EXFAT_TOOLS_VERSION "1.0.1"
+#define EXFAT_PROGS_VERSION "1.0.1"
 
 #endif /* !_VERSION_H */

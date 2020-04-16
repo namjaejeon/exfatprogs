@@ -1,6 +1,6 @@
 AC_PREREQ([2.68])
 
-AC_INIT([CIFSD tools], [exfat_tools_version],
+AC_INIT([exfatprogs], [exfatprogs_version],
 	[linkinjeon@gmail.com])
 
 AC_CONFIG_SRCDIR([config.h.in])
