@@ -18,6 +18,7 @@
 #include "exfat_ondisk.h"
 #include "exfat_tools.h"
 #include "mkfs.h"
+#include "version.h"
 
 #ifdef WORDS_BIGENDIAN
 #define BITOP_LE_SWIZZLE	(~0x7)
@@ -236,7 +237,7 @@ ssize_t exfat_utf16_enc(const char *in_str, __u16 *out_str, size_t out_size)
 ssize_t exfat_utf16_dec(const __u16 *in_str, size_t in_len,
 			char *out_str, size_t out_size)
 {
-	size_t mbs_len, wcs_len, out_len, c_len, i;
+	size_t wcs_len, out_len, c_len, i;
 	char c_str[MB_LEN_MAX];
 	wchar_t *wcs;
 	mbstate_t ps;
