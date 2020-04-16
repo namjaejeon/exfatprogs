@@ -1,7 +1,7 @@
 AC_PREREQ([2.68])
 
 m4_define([exfat_tools_major_ver], [1])
-m4_define([exfat_tools_minor_ver], [0])
+m4_define([exfat_tools_minor_ver], [3])
 m4_define([exfat_tools_micro_ver], [1])
 
 m4_define([exfat_tools_version],
