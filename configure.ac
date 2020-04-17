@@ -1,7 +1,14 @@
 AC_PREREQ([2.68])
 
-AC_INIT([exfatprogs], [exfatprogs_version],
-	[linkinjeon@kernel.org])
+m4_define([exfat_progs_version], m4_esyscmd_s(
+	 grep "define EXFAT_PROGS_VERSION " include/version.h | \
+		 awk '{print $3}' | sed 's/\"//g'))
+
+AC_INIT([exfatprogs],
+	exfat_progs_version,
+	[linkinjeon@kernel.org],
+	[exfatprogs],
+	[https://github.com/exfatprogs/exfatprogs])
 
 AC_CONFIG_SRCDIR([config.h.in])
 AC_CONFIG_HEADER([config.h])
