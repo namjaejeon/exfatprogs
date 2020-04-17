@@ -6,7 +6,7 @@
 #include <string.h>
 
 #include "exfat_ondisk.h"
-#include "exfat_tools.h"
+#include "libexfat.h"
 #include "fsck.h"
 #include "repair.h"
 
@@ -14,12 +14,10 @@ struct exfat_repair_problem {
 	er_problem_code_t	prcode;
 	const char		*description;
 	bool (*fix_problem)(struct exfat *exfat,
-			struct exfat_repair_problem *pr,
 			union exfat_repair_context *rctx);
 };
 
 static bool fix_bs_checksum(struct exfat *exfat,
-			struct exfat_repair_problem *pr,
 			union exfat_repair_context *rctx)
 {
 	unsigned int size;
@@ -104,5 +102,5 @@ bool exfat_repair(struct exfat *exfat, er_problem_code_t prcode,
 		return false;
 	}
 
-	return pr->fix_problem(exfat, pr, rctx);
+	return pr->fix_problem(exfat, rctx);
 }

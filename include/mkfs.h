@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- *  Copyright (C) 2019 Namjae Jeon <linkinjeon@gmail.com>
+ *  Copyright (C) 2019 Namjae Jeon <linkinjeon@kernel.org>
  */
 
 #ifndef _MKFS_H
@@ -29,7 +29,6 @@ struct exfat_mkfs_info {
 
 extern struct exfat_mkfs_info finfo;
 
-int exfat_create_upcase_table(struct exfat_blk_dev *bd,
-		struct exfat_user_input *ui);
+int exfat_create_upcase_table(struct exfat_blk_dev *bd);
 
 #endif /* !_MKFS_H */

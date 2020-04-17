@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- *  Copyright (C) 2019 Namjae Jeon <linkinjeon@gmail.com>
+ *  Copyright (C) 2019 Namjae Jeon <linkinjeon@kernel.org>
  */
 
-#ifndef _EXFAT_TOOLS_H
+#ifndef _LIBEXFAT_H
 
 #include <stdbool.h>
 #include <wchar.h>
@@ -54,7 +54,7 @@ struct exfat_user_input {
 	unsigned int cluster_size;
 	unsigned int sec_per_clu;
 	bool quick;
-	char volume_label[22];
+	__u16 volume_label[11];
 	int volume_label_len;
 };
 
@@ -72,11 +72,15 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 ssize_t exfat_read(int fd, void *buf, size_t size, off_t offset);
 ssize_t exfat_write(int fd, void *buf, size_t size, off_t offset);
 
+ssize_t exfat_utf16_enc(const char *in_str, __u16 *out_str, size_t out_size);
+ssize_t exfat_utf16_dec(const __u16 *in_str, size_t in_len,
+			char *out_str, size_t out_size);
+
 /*
  * Exfat Print
  */
 
-static unsigned int print_level = 1;
+extern unsigned int print_level;
 
 #define EXFAT_ERROR	(0)
 #define EXFAT_INFO	(1)
@@ -97,4 +101,4 @@ static unsigned int print_level = 1;
 #define exfat_info(fmt, ...)	exfat_msg(EXFAT_INFO, fmt, ##__VA_ARGS__)
 #define exfat_debug(fmt, ...)	exfat_msg(EXFAT_DEBUG, fmt, ##__VA_ARGS__)
 
-#endif /* !_EXFA_TOOLS_H */
+#endif /* !_LIBEXFAT_H */

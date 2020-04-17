@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- *   Copyright (C) 2019 Namjae Jeon <linkinjeon@gmail.com>
+ *   Copyright (C) 2019 Namjae Jeon <linkinjeon@kernel.org>
  */
 
 #include <stdio.h>
@@ -15,12 +15,11 @@
 #include <getopt.h>
 #include <errno.h>
 #include <math.h>
-#include <iconv.h>
+#include <locale.h>
 
 #include "exfat_ondisk.h"
-#include "exfat_tools.h"
+#include "libexfat.h"
 #include "mkfs.h"
-#include "exfat_iconv.h"
 
 struct exfat_mkfs_info finfo;
 
@@ -59,21 +58,21 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	ppbr->signature = cpu_to_le16(PBR_SIGNATURE);
 
 	exfat_msg(EXFAT_DEBUG, "Volume Length(sectors) : %llu\n",
-		cpu_to_le64(pbsx->vol_length));
+		le64_to_cpu(pbsx->vol_length));
 	exfat_msg(EXFAT_DEBUG, "FAT Offset(sector offset) : %u\n",
-		cpu_to_le64(pbsx->fat_offset));
+		le32_to_cpu(pbsx->fat_offset));
 	exfat_msg(EXFAT_DEBUG, "FAT Length(sectors) : %u\n",
-		cpu_to_le32(pbsx->fat_length));
+		le32_to_cpu(pbsx->fat_length));
 	exfat_msg(EXFAT_DEBUG, "Cluster Heap Offset (sector offset) : %u\n",
-		cpu_to_le32(pbsx->clu_offset));
+		le32_to_cpu(pbsx->clu_offset));
 	exfat_msg(EXFAT_DEBUG, "Cluster Count (sectors) : %u\n",
-		cpu_to_le32(pbsx->clu_count));
+		le32_to_cpu(pbsx->clu_count));
 	exfat_msg(EXFAT_DEBUG, "Root Cluster (cluster offset) : %u\n",
-		cpu_to_le32(pbsx->root_cluster));
+		le32_to_cpu(pbsx->root_cluster));
 	exfat_msg(EXFAT_DEBUG, "Sector Size Bits : %u\n",
-		cpu_to_le32(pbsx->sect_size_bits));
+		pbsx->sect_size_bits);
 	exfat_msg(EXFAT_DEBUG, "Sector per Cluster bits : %u\n",
-		cpu_to_le32(pbsx->sect_per_clus_bits));
+		pbsx->sect_per_clus_bits);
 }
 
 static int exfat_write_sector(struct exfat_blk_dev *bd, void *buf,
@@ -153,7 +152,6 @@ static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
 			false, checksum);
 	}
 
-out:
 	return 0;
 }
 
@@ -287,7 +285,7 @@ static int write_fat_entries(struct exfat_user_input *ui, int fd,
 static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
-	int ret, clu, count;
+	int ret, clu;
 
 	/* fat entry 0 should be media type field(0xF8) */
 	ret = write_fat_entry(bd->dev_fd, cpu_to_le32(0xfffffff8), 0);
@@ -328,8 +326,7 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 	return ret;
 }
 
-static int exfat_create_bitmap(struct exfat_blk_dev *bd,
-		struct exfat_user_input *ui)
+static int exfat_create_bitmap(struct exfat_blk_dev *bd)
 {
 	char *bitmap;
 	int i, nbytes;
@@ -358,14 +355,13 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 {
 	struct exfat_dentry ed[3];
 	int dentries_len = sizeof(struct exfat_dentry) * 3;
-	int nbytes, vol_len;
+	int nbytes;
 
 	/* Set volume label entry */
 	ed[0].type = EXFAT_VOLUME;
 	memset(ed[0].vol_label, 0, 22);
 	memcpy(ed[0].vol_label, ui->volume_label, ui->volume_label_len);
-	ed[0].vol_char_cnt = exfat_iconv_encstr_len(ui->volume_label,
-						ui->volume_label_len);
+	ed[0].vol_char_cnt = ui->volume_label_len/2;
 
 	/* Set bitmap entry */
 	ed[1].type = EXFAT_BITMAP;
@@ -377,7 +373,7 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 	ed[2].type = EXFAT_UPCASE;
 	ed[2].upcase_checksum = cpu_to_le32(0xe619d30d);
 	ed[2].upcase_start_clu = cpu_to_le32(finfo.ut_start_clu);
-	ed[2].upcase_size = cpu_to_le32(EXFAT_UPCASE_TABLE_SIZE);
+	ed[2].upcase_size = cpu_to_le64(EXFAT_UPCASE_TABLE_SIZE);
 
 	lseek(bd->dev_fd, finfo.root_byte_off, SEEK_SET);
 	nbytes = write(bd->dev_fd, ed, dentries_len);
@@ -486,8 +482,9 @@ static int exfat_zero_out_disk(struct exfat_blk_dev *bd,
 			break;
 		}
 		total_written += nbytes;
-	} while (total_written <= size);
+	} while (total_written < size);
 
+	free(buf);
 	exfat_msg(EXFAT_DEBUG,
 		"zero out written size : %llu, disk size : %llu\n",
 		total_written, bd->size);
@@ -522,13 +519,13 @@ static int make_exfat(struct exfat_blk_dev *bd, struct exfat_user_input *ui)
 		return ret;
 
 	exfat_msg(EXFAT_INFO, "Allocation bitmap creation: ");
-	ret = exfat_create_bitmap(bd, ui);
+	ret = exfat_create_bitmap(bd);
 	exfat_msg(EXFAT_INFO, "%s\n", ret ? "failed" : "done");
 	if (ret)
 		return ret;
 
 	exfat_msg(EXFAT_INFO, "Upcate table creation: ");
-	ret = exfat_create_upcase_table(bd, ui);
+	ret = exfat_create_upcase_table(bd);
 	exfat_msg(EXFAT_INFO, "%s\n", ret ? "failed" : "done");
 	if (ret)
 		return ret;
@@ -567,27 +564,27 @@ int main(int argc, char *argv[])
 {
 	int c;
 	int ret = EXIT_FAILURE;
-	char *blk_dev_name;
 	struct exfat_blk_dev bd;
 	struct exfat_user_input ui;
 	bool version_only = false;
-	struct exfat_iconv exfat_iconv;
 
 	init_user_input(&ui);
 
-	if (exfat_iconv_open(&exfat_iconv) < 0) {
-		exfat_msg(EXFAT_ERROR, "failed to init iconv\n");
-		return EXIT_FAILURE;
-	}
+	if (!setlocale(LC_CTYPE, ""))
+		exfat_msg(EXFAT_ERROR, "failed to init locale/codeset\n");
 
 	opterr = 0;
-	while ((c = getopt_long(argc, argv, "l:c:fVvh", opts, NULL)) != EOF)
+	while ((c = getopt_long(argc, argv, "n:l:c:fVvh", opts, NULL)) != EOF)
 		switch (c) {
+		/*
+		 * Make 'n' option fallthrough to 'l' option for for backward
+		 * compatibility with old utils.
+		 */
+		case 'n':
 		case 'l':
 		{
-			ret = exfat_iconv_enc(&exfat_iconv, optarg,
-					strlen(optarg), ui.volume_label,
-					sizeof(ui.volume_label));
+			ret = exfat_utf16_enc(optarg,
+				ui.volume_label, sizeof(ui.volume_label));
 			if (ret < 0)
 				goto out;
 
@@ -626,12 +623,11 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 
 	if (argc - optind != 1) {
-		exfat_iconv_close(&exfat_iconv);
 		usage();
 	}
 
-	memset(ui.dev_name, 0, 255);
-	strncpy(ui.dev_name, argv[optind], 255);
+	memset(ui.dev_name, 0, sizeof(ui.dev_name));
+	snprintf(ui.dev_name, sizeof(ui.dev_name), "%s", argv[optind]);
 
 	ret = exfat_get_blk_dev_info(&ui, &bd);
 	if (ret < 0)
@@ -656,7 +652,6 @@ out:
 		exfat_msg(EXFAT_INFO, "\nexFAT format complete!\n");
 	else
 		exfat_msg(EXFAT_INFO, "\nexFAT format fail!\n");
-	exfat_iconv_close(&exfat_iconv);
 	close(bd.dev_fd);
 	return ret;
 }

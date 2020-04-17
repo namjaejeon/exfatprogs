@@ -1,16 +1,14 @@
 AC_PREREQ([2.68])
 
-m4_define([exfat_tools_major_ver], [1])
-m4_define([exfat_tools_minor_ver], [0])
-m4_define([exfat_tools_micro_ver], [1])
+m4_define([exfat_progs_version], m4_esyscmd_s(
+	 grep "define EXFAT_PROGS_VERSION " include/version.h | \
+		 awk '{print $3}' | sed 's/\"//g'))
 
-m4_define([exfat_tools_version],
-	[exfat_tools_major_ver.exfat_tools_minor_ver.exfat_tools_micro_ver])
-
-AC_INIT([CIFSD tools], [exfat_tools_version],
-	[linkinjeon@gmail.com])
-
-AC_DEFINE([EXFAT_TOOLS_VERSION], "exfat_tools_version", [exfat-tools version])
+AC_INIT([exfatprogs],
+	exfat_progs_version,
+	[linkinjeon@kernel.org],
+	[exfatprogs],
+	[https://github.com/exfatprogs/exfatprogs])
 
 AC_CONFIG_SRCDIR([config.h.in])
 AC_CONFIG_HEADER([config.h])
@@ -23,6 +21,8 @@ AC_PROG_CC
 AC_PROG_CC_STDC
 AM_SILENT_RULES([yes])
 AC_PROG_LIBTOOL
+AC_SYS_LARGEFILE
+AC_C_BIGENDIAN
 
 PKG_PROG_PKG_CONFIG([0.9])
 
