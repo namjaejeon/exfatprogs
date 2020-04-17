@@ -6,6 +6,7 @@
 #ifndef _LIBEXFAT_H
 
 #include <stdbool.h>
+#include <sys/types.h>
 #include <wchar.h>
 
 #define KB			(1024)
