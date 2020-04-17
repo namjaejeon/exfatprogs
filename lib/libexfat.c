@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- *   Copyright (C) 2019 Namjae Jeon <linkinjeon@gmail.com>
+ *   Copyright (C) 2019 Namjae Jeon <linkinjeon@kernel.org>
  */
 
 #include <sys/types.h>
@@ -16,7 +16,7 @@
 #include <limits.h>
 
 #include "exfat_ondisk.h"
-#include "exfat_tools.h"
+#include "libexfat.h"
 #include "mkfs.h"
 #include "version.h"
 
@@ -107,7 +107,7 @@ void boot_calc_checksum(unsigned char *sector, unsigned short size,
 
 void show_version(void)
 {
-	printf("exfat-tools version : %s\n", EXFAT_TOOLS_VERSION);
+	printf("exfatprogs version : %s\n", EXFAT_PROGS_VERSION);
 }
 
 static inline unsigned int sector_size_bits(unsigned int size)

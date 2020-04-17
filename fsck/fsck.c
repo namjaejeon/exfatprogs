@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- *   Copyright (C) 2019 Namjae Jeon <linkinjeon@gmail.com>
+ *   Copyright (C) 2019 Namjae Jeon <linkinjeon@kernel.org>
  *   Copyright (C) 2020 Hyunchul Lee <hyc.lee@gmail.com>
  */
 
@@ -13,7 +13,7 @@
 #include <locale.h>
 
 #include "exfat_ondisk.h"
-#include "exfat_tools.h"
+#include "libexfat.h"
 #include "fsck.h"
 #include "repair.h"
 

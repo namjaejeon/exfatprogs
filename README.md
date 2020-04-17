@@ -1,12 +1,12 @@
 
-## exfat-utils
-exfat-utils is mkfs(format)/fsck(repair) implementation for exfat filesystem under GNU GPL version 2.
+## exfatprogs
+exfatprogs is userspace utilities for exfat filesystem under GNU GPL version 2.
 
 ## Maintainers
-* Namjae Jeon <linkinjeon@gmail.com>
+* Namjae Jeon <linkinjeon@kernel.org>
 * Hyunchul Lee <hyc.lee@gmail.com>
 
-## Building exfat-utils
+## Building exfatprogs
 Install prerequisite packages:
 ```
 For Ubuntu:
@@ -18,14 +18,14 @@ For Fedora, RHEL:
 
 Build steps:
 ```
-    cd into the exfat-utils directory:
+    cd into the exfatprogs directory:
     ./autogen.sh
     ./configure
     make
     make install
 ```
 
-## Using exfat-utils
+## Using exfatprogs
 ```
 - mkfs.exfat:
     Build a exfat filesystem on a device or partition(e.g. /dev/hda1, dev/sda1).

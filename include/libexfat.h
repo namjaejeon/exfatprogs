@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- *  Copyright (C) 2019 Namjae Jeon <linkinjeon@gmail.com>
+ *  Copyright (C) 2019 Namjae Jeon <linkinjeon@kernel.org>
  */
 
-#ifndef _EXFAT_TOOLS_H
+#ifndef _LIBEXFAT_H
 
 #include <stdbool.h>
 #include <wchar.h>
@@ -101,4 +101,4 @@ extern unsigned int print_level;
 #define exfat_info(fmt, ...)	exfat_msg(EXFAT_INFO, fmt, ##__VA_ARGS__)
 #define exfat_debug(fmt, ...)	exfat_msg(EXFAT_DEBUG, fmt, ##__VA_ARGS__)
 
-#endif /* !_EXFA_TOOLS_H */
+#endif /* !_LIBEXFAT_H */

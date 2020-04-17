@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- *   Copyright (C) 2019 Namjae Jeon <linkinjeon@gmail.com>
+ *   Copyright (C) 2019 Namjae Jeon <linkinjeon@kernel.org>
  */
 
 #include <stdio.h>
@@ -9,7 +9,7 @@
 #include <errno.h>
 
 #include "exfat_ondisk.h"
-#include "exfat_tools.h"
+#include "libexfat.h"
 #include "mkfs.h"
 
 static const unsigned char upcase_table[EXFAT_UPCASE_TABLE_SIZE] = {
