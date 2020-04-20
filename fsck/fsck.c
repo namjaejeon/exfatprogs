@@ -1014,7 +1014,7 @@ static bool read_upcase_table(struct exfat_de_iter *iter)
 static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 {
 	int ret;
-	struct exfat_inode *node;
+	struct exfat_inode *node = NULL;
 	struct exfat_dentry *dentry;
 	int dentry_count;
 	struct list_head sub_dir_list;
