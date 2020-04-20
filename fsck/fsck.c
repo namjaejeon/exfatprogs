@@ -193,6 +193,10 @@ static void free_exfat(struct exfat *exfat)
 	if (exfat) {
 		if (exfat->bs)
 			free(exfat->bs);
+		if (exfat->de_iter.dentries)
+			free(exfat->de_iter.dentries);
+		if (exfat->alloc_bitmap)
+			free(exfat->alloc_bitmap);
 		free(exfat);
 	}
 }
@@ -585,7 +589,7 @@ static int resolve_path_parent(struct path_resolve_ctx *ctx,
 	return ret;
 }
 
-int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
+static int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 						struct exfat_inode *dir)
 {
 	ssize_t ret;
@@ -613,13 +617,8 @@ int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 	return 0;
 }
 
-void exfat_de_iter_fini(struct exfat_de_iter *iter)
-{
-	free(iter->dentries);
-}
-
-int exfat_de_iter_get(struct exfat_de_iter *iter,
-					int ith, struct exfat_dentry **dentry)
+static int exfat_de_iter_get(struct exfat_de_iter *iter,
+				int ith, struct exfat_dentry **dentry)
 {
 	off_t de_next_file_offset;
 	int de_next_offset;
@@ -674,7 +673,7 @@ int exfat_de_iter_get(struct exfat_de_iter *iter,
  * @skip_dentries must be the largest @ith + 1 of exfat_de_iter_get
  * since the last call of exfat_de_iter_advance
  */
-int exfat_de_iter_advance(struct exfat_de_iter *iter, int skip_dentries)
+static int exfat_de_iter_advance(struct exfat_de_iter *iter, int skip_dentries)
 {
 	if (skip_dentries != iter->max_skip_dentries)
 		return -EINVAL;
@@ -685,7 +684,7 @@ int exfat_de_iter_advance(struct exfat_de_iter *iter, int skip_dentries)
 	return 0;
 }
 
-off_t exfat_de_iter_file_offset(struct exfat_de_iter *iter)
+static off_t exfat_de_iter_file_offset(struct exfat_de_iter *iter)
 {
 	return iter->de_file_offset;
 }
@@ -1015,7 +1014,7 @@ static bool read_upcase_table(struct exfat_de_iter *iter)
 static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 {
 	int ret;
-	struct exfat_inode *node;
+	struct exfat_inode *node = NULL;
 	struct exfat_dentry *dentry;
 	int dentry_count;
 	struct list_head sub_dir_list;
