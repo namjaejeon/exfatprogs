@@ -193,6 +193,8 @@ static void free_exfat(struct exfat *exfat)
 	if (exfat) {
 		if (exfat->bs)
 			free(exfat->bs);
+		if (exfat->de_iter.dentries)
+			free(exfat->de_iter.dentries);
 		free(exfat);
 	}
 }
@@ -611,11 +613,6 @@ int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 	iter->next_read_offset = iter->read_size;
 	iter->max_skip_dentries = 0;
 	return 0;
-}
-
-void exfat_de_iter_fini(struct exfat_de_iter *iter)
-{
-	free(iter->dentries);
 }
 
 int exfat_de_iter_get(struct exfat_de_iter *iter,
