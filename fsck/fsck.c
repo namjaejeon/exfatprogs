@@ -587,7 +587,7 @@ static int resolve_path_parent(struct path_resolve_ctx *ctx,
 	return ret;
 }
 
-int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
+static int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 						struct exfat_inode *dir)
 {
 	ssize_t ret;
@@ -615,8 +615,8 @@ int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 	return 0;
 }
 
-int exfat_de_iter_get(struct exfat_de_iter *iter,
-					int ith, struct exfat_dentry **dentry)
+static int exfat_de_iter_get(struct exfat_de_iter *iter,
+				int ith, struct exfat_dentry **dentry)
 {
 	off_t de_next_file_offset;
 	int de_next_offset;
@@ -671,7 +671,7 @@ int exfat_de_iter_get(struct exfat_de_iter *iter,
  * @skip_dentries must be the largest @ith + 1 of exfat_de_iter_get
  * since the last call of exfat_de_iter_advance
  */
-int exfat_de_iter_advance(struct exfat_de_iter *iter, int skip_dentries)
+static int exfat_de_iter_advance(struct exfat_de_iter *iter, int skip_dentries)
 {
 	if (skip_dentries != iter->max_skip_dentries)
 		return -EINVAL;
@@ -682,7 +682,7 @@ int exfat_de_iter_advance(struct exfat_de_iter *iter, int skip_dentries)
 	return 0;
 }
 
-off_t exfat_de_iter_file_offset(struct exfat_de_iter *iter)
+static off_t exfat_de_iter_file_offset(struct exfat_de_iter *iter)
 {
 	return iter->de_file_offset;
 }
