@@ -195,6 +195,8 @@ static void free_exfat(struct exfat *exfat)
 			free(exfat->bs);
 		if (exfat->de_iter.dentries)
 			free(exfat->de_iter.dentries);
+		if (exfat->alloc_bitmap)
+			free(exfat->alloc_bitmap);
 		free(exfat);
 	}
 }
