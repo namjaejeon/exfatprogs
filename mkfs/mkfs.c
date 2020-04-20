@@ -401,7 +401,7 @@ static void usage(void)
 }
 
 static struct option opts[] = {
-	{"volme-label",		required_argument,	NULL,	'l' },
+	{"volume-label",	required_argument,	NULL,	'l' },
 	{"cluster-size",	required_argument,	NULL,	'c' },
 	{"full-format",		no_argument,		NULL,	'f' },
 	{"version",		no_argument,		NULL,	'V' },
@@ -524,7 +524,7 @@ static int make_exfat(struct exfat_blk_dev *bd, struct exfat_user_input *ui)
 	if (ret)
 		return ret;
 
-	exfat_msg(EXFAT_INFO, "Upcate table creation: ");
+	exfat_msg(EXFAT_INFO, "Upcase table creation: ");
 	ret = exfat_create_upcase_table(bd);
 	exfat_msg(EXFAT_INFO, "%s\n", ret ? "failed" : "done");
 	if (ret)
