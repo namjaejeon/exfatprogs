@@ -401,7 +401,7 @@ static void usage(void)
 }
 
 static struct option opts[] = {
-	{"volme-label",		required_argument,	NULL,	'l' },
+	{"volume-label",	required_argument,	NULL,	'l' },
 	{"cluster-size",	required_argument,	NULL,	'c' },
 	{"full-format",		no_argument,		NULL,	'f' },
 	{"version",		no_argument,		NULL,	'V' },
