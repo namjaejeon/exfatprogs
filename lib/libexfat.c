@@ -133,6 +133,13 @@ static void exfat_set_default_cluster_size(struct exfat_blk_dev *bd,
 		ui->cluster_size = 128 * KB;
 }
 
+void init_user_input(struct exfat_user_input *ui)
+{
+	memset(ui, 0, sizeof(struct exfat_user_input));
+	ui->writeable = true;
+	ui->quick = true;
+}
+
 int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 		struct exfat_blk_dev *bd)
 {

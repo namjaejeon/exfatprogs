@@ -410,13 +410,6 @@ static struct option opts[] = {
 	{NULL,			0,			NULL,	 0  }
 };
 
-static void init_user_input(struct exfat_user_input *ui)
-{
-	memset(ui, 0, sizeof(struct exfat_user_input));
-	ui->writeable = true;
-	ui->quick = true;
-}
-
 static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
