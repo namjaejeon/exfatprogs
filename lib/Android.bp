@@ -6,5 +6,5 @@ cc_library_static {
     srcs: [
         "libexfat.c",
     ],
-    defaults: ["exfat-utils-defaults"],
+    defaults: ["exfatprogs-defaults"],
 }

@@ -1,7 +1,7 @@
 // Copyright 2020 The Android Open Source Project
 
 cc_library_headers {
-    name: "libexfat-utils-headers",
+    name: "libexfatprogs-headers",
     export_include_dirs: [
         "include",
         "mkfs",
@@ -10,7 +10,7 @@ cc_library_headers {
 }
 
 cc_defaults {
-    name: "exfat-utils-defaults",
-    header_libs: ["libexfat-utils-headers"],
-    export_header_lib_headers: ["libexfat-utils-headers"],
+    name: "exfatprogs-defaults",
+    header_libs: ["libexfatprogs-headers"],
+    export_header_lib_headers: ["libexfatprogs-headers"],
 }

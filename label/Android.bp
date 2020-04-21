@@ -6,6 +6,6 @@ cc_binary {
     srcs: [
         "label.c",
     ],
-    defaults: ["exfat-utils-defaults"],
+    defaults: ["exfatprogs-defaults"],
     static_libs: ["libexfat"],
 }
