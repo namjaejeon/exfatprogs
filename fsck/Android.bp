@@ -7,6 +7,6 @@ cc_binary {
         "fsck.c",
         "repair.c",
     ],
-    defaults: ["exfat-utils-defaults"],
+    defaults: ["exfatprogs-defaults"],
     static_libs: ["libexfat"],
 }

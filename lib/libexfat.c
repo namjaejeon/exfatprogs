@@ -133,6 +133,13 @@ static void exfat_set_default_cluster_size(struct exfat_blk_dev *bd,
 		ui->cluster_size = 128 * KB;
 }
 
+void init_user_input(struct exfat_user_input *ui)
+{
+	memset(ui, 0, sizeof(struct exfat_user_input));
+	ui->writeable = true;
+	ui->quick = true;
+}
+
 int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 		struct exfat_blk_dev *bd)
 {
@@ -140,13 +147,14 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 	off_t blk_dev_size;
 
 	fd = open(ui->dev_name, ui->writeable ? O_RDWR : O_RDONLY);
-	if (fd < 0)
+	if (fd < 0) {
+		exfat_err("open failed : %s, errno : %d\n", ui->dev_name,
+			errno);
 		return -1;
-
+	}
 	blk_dev_size = lseek(fd, 0, SEEK_END);
 	if (blk_dev_size <= 0) {
-		exfat_msg(EXFAT_ERROR,
-			"invalid block device size(%s)\n",
+		exfat_err("invalid block device size(%s)\n",
 			ui->dev_name);
 		ret = blk_dev_size;
 		close(fd);
@@ -164,12 +172,12 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 	bd->num_sectors = blk_dev_size / DEFAULT_SECTOR_SIZE;
 	bd->num_clusters = blk_dev_size / ui->cluster_size;
 
-	exfat_msg(EXFAT_DEBUG, "Block device name : %s\n", ui->dev_name);
-	exfat_msg(EXFAT_DEBUG, "Block device size : %lld\n", bd->size);
-	exfat_msg(EXFAT_DEBUG, "Block sector size : %u\n", bd->sector_size);
-	exfat_msg(EXFAT_DEBUG, "Number of the sectors : %llu\n",
+	exfat_debug("Block device name : %s\n", ui->dev_name);
+	exfat_debug("Block device size : %lld\n", bd->size);
+	exfat_debug("Block sector size : %u\n", bd->sector_size);
+	exfat_debug("Number of the sectors : %llu\n",
 		bd->num_sectors);
-	exfat_msg(EXFAT_DEBUG, "Number of the clusters : %u\n",
+	exfat_debug("Number of the clusters : %u\n",
 		bd->num_clusters);
 
 	ret = 0;
