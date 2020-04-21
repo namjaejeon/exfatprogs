@@ -147,9 +147,11 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 	off_t blk_dev_size;
 
 	fd = open(ui->dev_name, ui->writeable ? O_RDWR : O_RDONLY);
-	if (fd < 0)
+	if (fd < 0) {
+		exfat_err("open failed : %s, errno : %d\n", ui->dev_name,
+			errno);
 		return -1;
-
+	}
 	blk_dev_size = lseek(fd, 0, SEEK_END);
 	if (blk_dev_size <= 0) {
 		exfat_msg(EXFAT_ERROR,
