@@ -90,7 +90,7 @@ static int exfat_get_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
 		return -1;
 	}
 
-	exfat_msg(EXFAT_INFO, "label: %s\n", volume_label);
+	exfat_info("label: %s\n", volume_label);
 	return 0;
 }
 
@@ -122,7 +122,7 @@ static int exfat_set_volume_label(struct exfat_blk_dev *bd,
 	}
 	fsync(bd->dev_fd);
 
-	exfat_msg(EXFAT_INFO, "new label: %s\n", label_input);
+	exfat_info("new label: %s\n", label_input);
 	return 0;
 }
 
@@ -143,7 +143,7 @@ int main(int argc, char *argv[])
 	init_user_input(&ui);
 
 	if (!setlocale(LC_CTYPE, ""))
-		exfat_msg(EXFAT_ERROR, "failed to init locale/codeset\n");
+		exfat_err("failed to init locale/codeset\n");
 
 	opterr = 0;
 	while ((c = getopt_long(argc, argv, "s:gVvh", opts, NULL)) != EOF)
@@ -152,7 +152,7 @@ int main(int argc, char *argv[])
 			flags = EXFAT_GET_LABEL;
 			break;
 		case 's':
-			strncpy(label_input, optarg, 11);
+			snprintf(label_input, 11, "%s", optarg);
 			flags = EXFAT_SET_LABEL;
 			break;
 		case 'V':
