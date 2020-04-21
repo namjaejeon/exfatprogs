@@ -49,4 +49,13 @@ Usage example:
     1. check the consistency.
         fsck.exfat /dev/sda1
     2. repair and fix.(preparing)
+
+- label.exfat:
+    Get or set volume label from a given device that formatted by exfat filesystem.
+
+Usage example:
+    1. get volume label.
+        label.exfat -g /dev/sda1
+    2. set new volume label.
+        label.exfat -s "new label" /dev/sda1
 ```
