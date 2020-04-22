@@ -864,7 +864,7 @@ err:
 	return ret;
 }
 
-static int read_child(struct exfat_de_iter *de_iter,
+static int read_file(struct exfat_de_iter *de_iter,
 		struct exfat_inode **new_node, int *dentry_count)
 {
 	struct exfat_inode *node;
@@ -1052,7 +1052,7 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 
 		switch (dentry->type) {
 		case EXFAT_FILE:
-			ret = read_child(de_iter, &node, &dentry_count);
+			ret = read_file(de_iter, &node, &dentry_count);
 			if (ret) {
 				exfat_err("failed to verify file. %d\n", ret);
 				goto err;
