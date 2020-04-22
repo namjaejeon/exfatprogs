@@ -107,11 +107,12 @@ static struct exfat_inode *alloc_exfat_inode(__u16 attr)
 	INIT_LIST_HEAD(&node->sibling);
 	INIT_LIST_HEAD(&node->list);
 
+	node->last_pclus = EXFAT_EOF_CLUSTER;
+	node->attr = attr;
 	if (attr & ATTR_SUBDIR)
 		exfat_stat.dir_count++;
 	else
 		exfat_stat.file_count++;
-	node->attr = attr;
 	return node;
 }
 
@@ -336,10 +337,16 @@ static ssize_t exfat_file_read(struct exfat *exfat, struct exfat_inode *node,
 	if (remain_size == 0)
 		return 0;
 
-	p_clus = node->first_clus;
-	clus_offset = file_offset % clus_size;
 	start_l_clus = file_offset / clus_size;
-	l_clus = 0;
+	clus_offset = file_offset % clus_size;
+	if (start_l_clus >= node->last_lclus &&
+			node->last_pclus != EXFAT_EOF_CLUSTER) {
+		l_clus = node->last_lclus;
+		p_clus = node->last_pclus;
+	} else {
+		l_clus = 0;
+		p_clus = node->first_clus;
+	}
 
 	while (p_clus != EXFAT_EOF_CLUSTER) {
 		if (exfat_invalid_clus(exfat, p_clus))
@@ -357,7 +364,7 @@ static ssize_t exfat_file_read(struct exfat *exfat, struct exfat_inode *node,
 		buf = (char *)buf + read_size;
 		remain_size -= read_size;
 		if (remain_size == 0)
-			return total_size;
+			goto out;
 
 next_clus:
 		l_clus++;
@@ -365,6 +372,9 @@ next_clus:
 		if (ret)
 			return ret;
 	}
+out:
+	node->last_lclus = l_clus;
+	node->last_pclus = p_clus;
 	return total_size - remain_size;
 }
 
@@ -854,7 +864,7 @@ err:
 	return ret;
 }
 
-static int read_child(struct exfat_de_iter *de_iter,
+static int read_file(struct exfat_de_iter *de_iter,
 		struct exfat_inode **new_node, int *dentry_count)
 {
 	struct exfat_inode *node;
@@ -1042,7 +1052,7 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 
 		switch (dentry->type) {
 		case EXFAT_FILE:
-			ret = read_child(de_iter, &node, &dentry_count);
+			ret = read_file(de_iter, &node, &dentry_count);
 			if (ret) {
 				exfat_err("failed to verify file. %d\n", ret);
 				goto err;

@@ -17,6 +17,8 @@ struct exfat_inode {
 	struct list_head	sibling;
 	struct list_head	list;
 	clus_t			first_clus;
+	clus_t			last_lclus;
+	clus_t			last_pclus;
 	__u16			attr;
 	__u64			size;
 	bool			is_contiguous;
