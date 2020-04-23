@@ -107,11 +107,12 @@ static struct exfat_inode *alloc_exfat_inode(__u16 attr)
 	INIT_LIST_HEAD(&node->sibling);
 	INIT_LIST_HEAD(&node->list);
 
+	node->last_pclus = EXFAT_EOF_CLUSTER;
+	node->attr = attr;
 	if (attr & ATTR_SUBDIR)
 		exfat_stat.dir_count++;
 	else
 		exfat_stat.file_count++;
-	node->attr = attr;
 	return node;
 }
 
@@ -193,6 +194,10 @@ static void free_exfat(struct exfat *exfat)
 	if (exfat) {
 		if (exfat->bs)
 			free(exfat->bs);
+		if (exfat->de_iter.dentries)
+			free(exfat->de_iter.dentries);
+		if (exfat->alloc_bitmap)
+			free(exfat->alloc_bitmap);
 		free(exfat);
 	}
 }
@@ -332,10 +337,16 @@ static ssize_t exfat_file_read(struct exfat *exfat, struct exfat_inode *node,
 	if (remain_size == 0)
 		return 0;
 
-	p_clus = node->first_clus;
-	clus_offset = file_offset % clus_size;
 	start_l_clus = file_offset / clus_size;
-	l_clus = 0;
+	clus_offset = file_offset % clus_size;
+	if (start_l_clus >= node->last_lclus &&
+			node->last_pclus != EXFAT_EOF_CLUSTER) {
+		l_clus = node->last_lclus;
+		p_clus = node->last_pclus;
+	} else {
+		l_clus = 0;
+		p_clus = node->first_clus;
+	}
 
 	while (p_clus != EXFAT_EOF_CLUSTER) {
 		if (exfat_invalid_clus(exfat, p_clus))
@@ -353,7 +364,7 @@ static ssize_t exfat_file_read(struct exfat *exfat, struct exfat_inode *node,
 		buf = (char *)buf + read_size;
 		remain_size -= read_size;
 		if (remain_size == 0)
-			return total_size;
+			goto out;
 
 next_clus:
 		l_clus++;
@@ -361,6 +372,9 @@ next_clus:
 		if (ret)
 			return ret;
 	}
+out:
+	node->last_lclus = l_clus;
+	node->last_pclus = p_clus;
 	return total_size - remain_size;
 }
 
@@ -585,7 +599,7 @@ static int resolve_path_parent(struct path_resolve_ctx *ctx,
 	return ret;
 }
 
-int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
+static int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 						struct exfat_inode *dir)
 {
 	ssize_t ret;
@@ -613,13 +627,8 @@ int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 	return 0;
 }
 
-void exfat_de_iter_fini(struct exfat_de_iter *iter)
-{
-	free(iter->dentries);
-}
-
-int exfat_de_iter_get(struct exfat_de_iter *iter,
-					int ith, struct exfat_dentry **dentry)
+static int exfat_de_iter_get(struct exfat_de_iter *iter,
+				int ith, struct exfat_dentry **dentry)
 {
 	off_t de_next_file_offset;
 	int de_next_offset;
@@ -674,7 +683,7 @@ int exfat_de_iter_get(struct exfat_de_iter *iter,
  * @skip_dentries must be the largest @ith + 1 of exfat_de_iter_get
  * since the last call of exfat_de_iter_advance
  */
-int exfat_de_iter_advance(struct exfat_de_iter *iter, int skip_dentries)
+static int exfat_de_iter_advance(struct exfat_de_iter *iter, int skip_dentries)
 {
 	if (skip_dentries != iter->max_skip_dentries)
 		return -EINVAL;
@@ -685,7 +694,7 @@ int exfat_de_iter_advance(struct exfat_de_iter *iter, int skip_dentries)
 	return 0;
 }
 
-off_t exfat_de_iter_file_offset(struct exfat_de_iter *iter)
+static off_t exfat_de_iter_file_offset(struct exfat_de_iter *iter)
 {
 	return iter->de_file_offset;
 }
@@ -855,7 +864,7 @@ err:
 	return ret;
 }
 
-static int read_child(struct exfat_de_iter *de_iter,
+static int read_file(struct exfat_de_iter *de_iter,
 		struct exfat_inode **new_node, int *dentry_count)
 {
 	struct exfat_inode *node;
@@ -1015,7 +1024,7 @@ static bool read_upcase_table(struct exfat_de_iter *iter)
 static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 {
 	int ret;
-	struct exfat_inode *node;
+	struct exfat_inode *node = NULL;
 	struct exfat_dentry *dentry;
 	int dentry_count;
 	struct list_head sub_dir_list;
@@ -1043,7 +1052,7 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 
 		switch (dentry->type) {
 		case EXFAT_FILE:
-			ret = read_child(de_iter, &node, &dentry_count);
+			ret = read_file(de_iter, &node, &dentry_count);
 			if (ret) {
 				exfat_err("failed to verify file. %d\n", ret);
 				goto err;

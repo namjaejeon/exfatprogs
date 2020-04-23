@@ -68,6 +68,7 @@ void exfat_clear_bit(struct exfat_blk_dev *bd, char *bitmap,
 wchar_t exfat_bad_char(wchar_t w);
 void boot_calc_checksum(unsigned char *sector, unsigned short size,
 		bool is_boot_sec, __le32 *checksum);
+void init_user_input(struct exfat_user_input *ui);
 int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 		struct exfat_blk_dev *bd);
 ssize_t exfat_read(int fd, void *buf, size_t size, off_t offset);
