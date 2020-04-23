@@ -10,6 +10,7 @@
 #include <getopt.h>
 #include <errno.h>
 #include <locale.h>
+#include <inttypes.h>
 
 #include "exfat_ondisk.h"
 #include "libexfat.h"
@@ -61,7 +62,7 @@ static off_t exfat_get_root_entry_offset(struct exfat_blk_dev *bd)
 		* cluster_size;
 	free(bs);
 
-	exfat_debug("root cluster offset : %ld\n", root_clu_off);
+	exfat_debug("root cluster offset : %" PRIu64 "\n", root_clu_off);
 	return root_clu_off;
 }
 
