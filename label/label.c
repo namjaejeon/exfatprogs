@@ -61,7 +61,6 @@ static off_t exfat_get_root_entry_offset(struct exfat_blk_dev *bd)
 		* cluster_size;
 	free(bs);
 
-	exfat_debug("root cluster offset : %ld\n", root_clu_off);
 	return root_clu_off;
 }
 
