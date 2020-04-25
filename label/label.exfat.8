@@ -1,0 +1,35 @@
+.TH label.exfat 8
+.SH NAME
+label.exfat \- get or change the volume label of an exFAT filesystem
+.SH SYNOPSIS
+.B label.exfat
+[
+.B \-g
+] [
+.B \-s volume_label
+.I volume_label
+] [
+.B \-v
+]
+.I device
+.br
+.B label.exfat \-V
+.SH DESCRIPTION
+.B label.exfat
+changes or gets the volume label of an existing exFAT filesystem.
+.PP
+.SH OPTIONS
+.TP
+.BI \-g
+Print the volume label of the exFAT filesystem.
+.TP
+.BI \-s " volume_label"
+Set the volume label of the filesystem to the provided argument.
+.TP
+.BI \-v
+Prints verbose debugging information while extracting or setting the volume
+label of the exFAT filesystem.
+.TP
+.B \-V
+Prints the version number and exits.
+.TP

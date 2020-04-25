@@ -16,7 +16,6 @@ script:
  - ./configure > /dev/null
  - make -j$((`nproc`+1)) > /dev/null
  - sudo make install > /dev/null
- - sudo cp lib/.libs/libexfat.so* /lib/
  - cd exfat_oot
  - make > /dev/null
  - sudo make install > /dev/null
