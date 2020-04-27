@@ -17,8 +17,7 @@
 static void usage(void)
 {
 	fprintf(stderr, "Usage: tune.exfat\n");
-	fprintf(stderr, "\t-g | --get-label	Get volume label\n");
-	fprintf(stderr, "\t-s | --set-label	Set volume label\n");
+	fprintf(stderr, "\t-l | --label		Set/Get volume label\n");
 	fprintf(stderr, "\t-V | --version	Show version\n");
 	fprintf(stderr, "\t-v | --verbose	Print debug\n");
 	fprintf(stderr, "\t-h | --help		Show help\n");
@@ -27,8 +26,7 @@ static void usage(void)
 }
 
 static struct option opts[] = {
-	{"get-label",		no_argument,		NULL,	'g' },
-	{"set-label",		required_argument,	NULL,	's' },
+	{"label",		optional_argument,	NULL,	'l' },
 	{"version",		no_argument,		NULL,	'V' },
 	{"verbose",		no_argument,		NULL,	'v' },
 	{"help",		no_argument,		NULL,	'h' },
@@ -145,14 +143,14 @@ int main(int argc, char *argv[])
 		exfat_err("failed to init locale/codeset\n");
 
 	opterr = 0;
-	while ((c = getopt_long(argc, argv, "s:gVvh", opts, NULL)) != EOF)
+	while ((c = getopt_long(argc, argv, "l::Vvh", opts, NULL)) != EOF)
 		switch (c) {
-		case 'g':
-			flags = EXFAT_GET_LABEL;
-			break;
-		case 's':
-			snprintf(label_input, 11, "%s", optarg);
-			flags = EXFAT_SET_LABEL;
+		case 'l':
+			if (optarg) {
+				snprintf(label_input, 11, "%s", optarg);
+				flags = EXFAT_SET_LABEL;
+			} else
+				flags = EXFAT_GET_LABEL;
 			break;
 		case 'V':
 			version_only = true;
@@ -170,12 +168,11 @@ int main(int argc, char *argv[])
 	if (version_only)
 		exit(EXIT_FAILURE);
 
-	if (argc - optind != 1) {
+	if (argc < 3)
 		usage();
-	}
 
 	memset(ui.dev_name, 0, sizeof(ui.dev_name));
-	snprintf(ui.dev_name, sizeof(ui.dev_name), "%s", argv[optind]);
+	snprintf(ui.dev_name, sizeof(ui.dev_name), "%s", argv[argc - 1]);
 
 	ret = exfat_get_blk_dev_info(&ui, &bd);
 	if (ret < 0)
