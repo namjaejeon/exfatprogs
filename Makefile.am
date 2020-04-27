@@ -2,12 +2,12 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = lib mkfs fsck label
+SUBDIRS = lib mkfs fsck tune
 
 # manpages
 dist_man8_MANS =		\
 	fsck/fsck.exfat.8	\
-	label/label.exfat.8	\
+	tune/tune.exfat.8	\
 	mkfs/mkfs.exfat.8
 
 # other stuff
@@ -16,6 +16,6 @@ EXTRA_DIST =			\
 	Android.bp		\
 	lib/Android.bp		\
 	mkfs/Android.bp		\
-	label/Android.bp	\
+	tune/Android.bp	\
 	fsck/Android.bp		\
 	README.md

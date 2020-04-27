@@ -16,7 +16,7 @@
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: label.exfat\n");
+	fprintf(stderr, "Usage: tune.exfat\n");
 	fprintf(stderr, "\t-g | --get-label	Get volume label\n");
 	fprintf(stderr, "\t-s | --set-label	Set volume label\n");
 	fprintf(stderr, "\t-V | --version	Show version\n");
