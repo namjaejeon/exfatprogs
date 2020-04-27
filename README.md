@@ -50,12 +50,12 @@ Usage example:
         fsck.exfat /dev/sda1
     2. repair and fix.(preparing)
 
-- label.exfat:
-    Get or set volume label from a given device that formatted by exfat filesystem.
+- tune.exfat:
+    Adjust tunable filesystem parameters on an exFAT filesystem
 
 Usage example:
-    1. get volume label.
-        label.exfat -g /dev/sda1
+    1. print current volume label.
+        tune.exfat -l /dev/sda1
     2. set new volume label.
-        label.exfat -s "new label" /dev/sda1
+        tune.exfat -l"new label" /dev/sda1
 ```
