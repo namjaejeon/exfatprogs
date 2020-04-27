@@ -81,6 +81,7 @@ static int exfat_get_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
 		return -1;
 	}
 
+	memset(volume_label, 0, 11);
 	if (exfat_utf16_dec(vol_entry->vol_label, vol_entry->vol_char_cnt*2,
 		volume_label, sizeof(volume_label)) < 0) {
 		exfat_err("failed to decode volume label\n");
