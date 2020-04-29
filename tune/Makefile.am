@@ -1,5 +1,5 @@
 AM_CFLAGS = -Wall -include $(top_srcdir)/config.h -I$(top_srcdir)/include -fno-common
-tune_exfat_LDADD = $(top_builddir)/lib/libexfat.la
+tune_exfat_LDADD = $(top_builddir)/lib/libexfat.a
 
 sbin_PROGRAMS = tune.exfat
 
