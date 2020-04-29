@@ -2,10 +2,6 @@
 ## exfatprogs
 exfatprogs is userspace utilities for exfat filesystem under GNU GPL version 2.
 
-## Maintainers
-* Namjae Jeon <linkinjeon@kernel.org>
-* Hyunchul Lee <hyc.lee@gmail.com>
-
 ## Building exfatprogs
 Install prerequisite packages:
 ```
@@ -59,3 +55,11 @@ Usage example:
     2. set new volume label.
         tune.exfat -l"new label" /dev/sda1
 ```
+
+## Sending feedback
+If you have any issues, please create [issues][1] or contact to [Namjae Jeon](mailto:linkinjeon@kernel.org) and
+[Hyunchul Lee](mailto:hyc.lee@gmail.com).
+[Contributions][2] are also welcome.
+
+[1]: https://github.com/exfatprogs/exfatprogs/issues
+[2]: https://github.com/exfatprogs/exfatprogs/pulls
