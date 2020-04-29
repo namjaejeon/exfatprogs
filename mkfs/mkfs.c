@@ -382,7 +382,7 @@ static void usage(void)
 {
 	fprintf(stderr, "Usage: mkfs.exfat\n");
 	fprintf(stderr, "\t-l string | --volume-label=string    Set volume label\n");
-	fprintf(stderr, "\t-c | --cluster-size			Set cluster size\n");
+	fprintf(stderr, "\t-c | --cluster-size                  Set cluster size\n");
 	fprintf(stderr, "\t-f | --full-format                   Full format\n");
 	fprintf(stderr, "\t-V | --version                       Show version\n");
 	fprintf(stderr, "\t-v | --verbose                       Print debug\n");
