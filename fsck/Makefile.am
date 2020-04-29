@@ -3,6 +3,6 @@ fsck_exfat_LDADD = $(top_builddir)/lib/libexfat.a
 
 sbin_PROGRAMS = fsck.exfat
 
-fsck_exfat_SOURCES = fsck.c repair.c
+fsck_exfat_SOURCES = fsck.c repair.c fsck.h
 
 man_MANS = fsck.exfat.8
