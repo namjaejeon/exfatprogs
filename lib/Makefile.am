@@ -4,4 +4,4 @@ AM_CFLAGS = -Wall -Werror -Wunused-parameter \
 LIBS = -lc
 noinst_LIBRARIES = libexfat.a
 
-libexfat_la_SOURCES = libexfat.c
+libexfat_a_SOURCES = libexfat.c
