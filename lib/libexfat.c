@@ -145,10 +145,10 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 	int fd, ret = -1;
 	off_t blk_dev_size;
 
-	fd = open(ui->dev_name, ui->writeable ? O_RDWR : O_RDONLY);
+	fd = open(ui->dev_name, ui->writeable ? O_RDWR|O_EXCL : O_RDONLY);
 	if (fd < 0) {
-		exfat_err("open failed : %s, errno : %d\n", ui->dev_name,
-			errno);
+		exfat_err("open failed : %s, %s\n", ui->dev_name,
+			strerror(errno));
 		return -1;
 	}
 	blk_dev_size = lseek(fd, 0, SEEK_END);
