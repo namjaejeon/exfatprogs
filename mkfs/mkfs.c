@@ -324,7 +324,7 @@ static int exfat_create_bitmap(struct exfat_blk_dev *bd)
 	char *bitmap;
 	int i, nbytes;
 
-	bitmap = malloc(finfo.bitmap_byte_len);
+	bitmap = calloc(finfo.bitmap_byte_len, sizeof(*bitmap));
 	if (!bitmap)
 		return -1;
 
@@ -336,9 +336,11 @@ static int exfat_create_bitmap(struct exfat_blk_dev *bd)
 	if (nbytes != finfo.bitmap_byte_len) {
 		exfat_err("write failed, nbytes : %d, bitmap_len : %d\n",
 			nbytes, finfo.bitmap_byte_len);
+		free(bitmap);
 		return -1;
 	}
 
+	free(bitmap);
 	return 0;
 }
 
