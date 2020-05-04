@@ -562,7 +562,7 @@ int main(int argc, char *argv[])
 	while ((c = getopt_long(argc, argv, "n:L:c:fVvh", opts, NULL)) != EOF)
 		switch (c) {
 		/*
-		 * Make 'n' option fallthrough to 'l' option for for backward
+		 * Make 'n' option fallthrough to 'L' option for for backward
 		 * compatibility with old utils.
 		 */
 		case 'n':
