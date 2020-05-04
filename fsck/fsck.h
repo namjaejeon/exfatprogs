@@ -5,8 +5,6 @@
 #ifndef _FSCK_H
 #define _FSCK_H
 
-#include <limits.h>
-
 #include "list.h"
 
 typedef __u32 clus_t;
@@ -27,7 +25,6 @@ struct exfat_inode {
 };
 
 #define EXFAT_NAME_MAX			255
-#define VOLUME_LABEL_BUFFER_SIZE	(VOLUME_LABEL_MAX_LEN*MB_LEN_MAX+1)
 #define NAME_BUFFER_SIZE		((EXFAT_NAME_MAX+1)*2)
 
 struct exfat_de_iter {
