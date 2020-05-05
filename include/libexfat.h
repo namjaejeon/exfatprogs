@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <sys/types.h>
 #include <wchar.h>
+#include <limits.h>
 
 #define KB			(1024)
 #define MB			(1024*1024)
@@ -28,6 +29,8 @@
 #define EXFAT_MAX_NUM_CLUSTER		(0xFFFFFFF5)
 
 #define DEFAULT_SECTOR_SIZE	(512)
+
+#define VOLUME_LABEL_BUFFER_SIZE	(VOLUME_LABEL_MAX_LEN*MB_LEN_MAX+1)
 
 /* Upcase tabel macro */
 #define EXFAT_UPCASE_TABLE_SIZE		(5836)
@@ -57,7 +60,7 @@ struct exfat_user_input {
 	unsigned int cluster_size;
 	unsigned int sec_per_clu;
 	bool quick;
-	__u16 volume_label[11];
+	__u16 volume_label[VOLUME_LABEL_MAX_LEN];
 	int volume_label_len;
 };
 
