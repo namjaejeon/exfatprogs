@@ -1210,10 +1210,13 @@ void exfat_show_stat(void)
 int main(int argc, char * const argv[])
 {
 	int c, ret;
-	struct fsck_user_input ui = {0,};
-	struct exfat_blk_dev bd = {0,};
+	struct fsck_user_input ui;
+	struct exfat_blk_dev bd;
 	struct exfat *exfat = NULL;
 	bool version_only = false;
+
+	memset(&ui, 0, sizeof(ui));
+	memset(&bd, 0, sizeof(bd));
 
 	print_level = EXFAT_ERROR;
 
