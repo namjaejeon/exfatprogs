@@ -1,10 +1,10 @@
 // Copyright 2020 The Android Open Source Project
 
 cc_binary {
-    name: "label.exfat",
+    name: "tune.exfat",
 
     srcs: [
-        "label.c",
+        "tune.c",
     ],
     defaults: ["exfatprogs-defaults"],
     static_libs: ["libexfat"],

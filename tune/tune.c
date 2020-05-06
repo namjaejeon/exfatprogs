@@ -16,19 +16,19 @@
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: label.exfat\n");
-	fprintf(stderr, "\t-g | --get-label	Get volume label\n");
-	fprintf(stderr, "\t-s | --set-label	Set volume label\n");
-	fprintf(stderr, "\t-V | --version	Show version\n");
-	fprintf(stderr, "\t-v | --verbose	Print debug\n");
-	fprintf(stderr, "\t-h | --help		Show help\n");
+	fprintf(stderr, "Usage: tune.exfat\n");
+	fprintf(stderr, "\t-l | --print-label   Print volume label\n");
+	fprintf(stderr, "\t-L | --set-label     Set volume label\n");
+	fprintf(stderr, "\t-V | --version       Show version\n");
+	fprintf(stderr, "\t-v | --verbose       Print debug\n");
+	fprintf(stderr, "\t-h | --help          Show help\n");
 
 	exit(EXIT_FAILURE);
 }
 
 static struct option opts[] = {
-	{"get-label",		no_argument,		NULL,	'g' },
-	{"set-label",		required_argument,	NULL,	's' },
+	{"print-label",		no_argument,		NULL,	'l' },
+	{"set-label",		required_argument,	NULL,	'L' },
 	{"version",		no_argument,		NULL,	'V' },
 	{"verbose",		no_argument,		NULL,	'v' },
 	{"help",		no_argument,		NULL,	'h' },
@@ -67,7 +67,7 @@ static off_t exfat_get_root_entry_offset(struct exfat_blk_dev *bd)
 static int exfat_get_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
 {
 	struct exfat_dentry *vol_entry;
-	char volume_label[11];
+	char volume_label[VOLUME_LABEL_BUFFER_SIZE];
 	int nbytes;
 
 	vol_entry = malloc(sizeof(struct exfat_dentry));
@@ -83,6 +83,7 @@ static int exfat_get_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
 		return -1;
 	}
 
+	memset(volume_label, 0, sizeof(volume_label));
 	if (exfat_utf16_dec(vol_entry->vol_label, vol_entry->vol_char_cnt*2,
 		volume_label, sizeof(volume_label)) < 0) {
 		exfat_err("failed to decode volume label\n");
@@ -98,7 +99,7 @@ static int exfat_set_volume_label(struct exfat_blk_dev *bd,
 {
 	struct exfat_dentry vol;
 	int nbytes;
-	__u16 volume_label[11];
+	__u16 volume_label[VOLUME_LABEL_MAX_LEN];
 	int volume_label_len;
 
 	volume_label_len = exfat_utf16_enc(label_input,
@@ -109,7 +110,7 @@ static int exfat_set_volume_label(struct exfat_blk_dev *bd,
 	}
 
 	vol.type = EXFAT_VOLUME;
-	memset(vol.vol_label, 0, 22);
+	memset(vol.vol_label, 0, sizeof(vol.vol_label));
 	memcpy(vol.vol_label, volume_label, volume_label_len);
 	vol.vol_char_cnt = volume_label_len/2;
 
@@ -136,7 +137,7 @@ int main(int argc, char *argv[])
 	struct exfat_user_input ui;
 	bool version_only = false;
 	int flags = 0;
-	char label_input[11];
+	char label_input[VOLUME_LABEL_BUFFER_SIZE];
 	off_t root_clu_off;
 
 	init_user_input(&ui);
@@ -145,13 +146,14 @@ int main(int argc, char *argv[])
 		exfat_err("failed to init locale/codeset\n");
 
 	opterr = 0;
-	while ((c = getopt_long(argc, argv, "s:gVvh", opts, NULL)) != EOF)
+	while ((c = getopt_long(argc, argv, "L:lVvh", opts, NULL)) != EOF)
 		switch (c) {
-		case 'g':
+		case 'l':
 			flags = EXFAT_GET_LABEL;
 			break;
-		case 's':
-			snprintf(label_input, 11, "%s", optarg);
+		case 'L':
+			snprintf(label_input, sizeof(label_input), "%s",
+					optarg);
 			flags = EXFAT_SET_LABEL;
 			break;
 		case 'V':
@@ -170,12 +172,11 @@ int main(int argc, char *argv[])
 	if (version_only)
 		exit(EXIT_FAILURE);
 
-	if (argc - optind != 1) {
+	if (argc < 3)
 		usage();
-	}
 
 	memset(ui.dev_name, 0, sizeof(ui.dev_name));
-	snprintf(ui.dev_name, sizeof(ui.dev_name), "%s", argv[optind]);
+	snprintf(ui.dev_name, sizeof(ui.dev_name), "%s", argv[argc - 1]);
 
 	ret = exfat_get_blk_dev_info(&ui, &bd);
 	if (ret < 0)

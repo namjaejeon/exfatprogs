@@ -1,11 +1,9 @@
-AM_CFLAGS = -Wall -Werror -Wunused-parameter \
-	    -Wno-address-of-packed-member \
-	    -include $(top_srcdir)/config.h -I$(top_srcdir)/include -fno-common
+AM_CFLAGS = -Wall -include $(top_builddir)/config.h -I$(top_srcdir)/include -fno-common
 LIBS = -lm
-mkfs_exfat_LDADD = $(top_builddir)/lib/libexfat.la
+mkfs_exfat_LDADD = $(top_builddir)/lib/libexfat.a
 
 sbin_PROGRAMS = mkfs.exfat
 
-mkfs_exfat_SOURCES = mkfs.c upcase.c
+mkfs_exfat_SOURCES = mkfs.c upcase.c mkfs.h
 
 man_MANS = mkfs.exfat.8
