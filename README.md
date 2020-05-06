@@ -3,9 +3,9 @@
 As new exfat filesystem is merged into linux-5.7 kernel, exfatprogs is
 created as an official userspace utilities that contain all of the standard
 utilities for creating and fixing and debugging exfat filesystem in linux
-system. exfatprogress is the goal of providing high performance and windows
-level outstanding utils compared to old utils. And this software is
-licensed under the GNU General Public License Version 2.
+system. The goal of exfatprogs is to provide high performance and quality
+at the level of exfat utilities in windows. And this software is licensed
+under the GNU General Public License Version 2.
 
 ## Building exfatprogs
 Install prerequisite packages:
