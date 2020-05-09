@@ -722,7 +722,7 @@ static bool check_inode(struct exfat *exfat, struct exfat_inode *parent,
 	if (node->size > le32_to_cpu(exfat->bs->bsx.clu_count) *
 				EXFAT_CLUSTER_SIZE(exfat->bs)) {
 		resolve_path_parent(&path_resolve_ctx, parent, node);
-		exfat_err("size %llu is greater than cluster heap: %s\n",
+		exfat_err("size %" PRIu64 " is greater than cluster heap: %s\n",
 				node->size, path_resolve_ctx.local_path);
 		ret = false;
 	}
@@ -737,7 +737,7 @@ static bool check_inode(struct exfat *exfat, struct exfat_inode *parent,
 	if ((node->attr & ATTR_SUBDIR) &&
 			node->size % EXFAT_CLUSTER_SIZE(exfat->bs) != 0) {
 		resolve_path_parent(&path_resolve_ctx, parent, node);
-		exfat_err("directory size %llu is not divisible by %d: %s\n",
+		exfat_err("directory size %" PRIu64 " is not divisible by %d: %s\n",
 				node->size, EXFAT_CLUSTER_SIZE(exfat->bs),
 				path_resolve_ctx.local_path);
 		ret = false;
@@ -849,7 +849,7 @@ static int read_file_dentries(struct exfat_de_iter *iter,
 
 	if (le64_to_cpu(stream_de->stream_valid_size) > node->size) {
 		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
-		exfat_err("valid size %" PRIu64 " greater than size %llu: %s\n",
+		exfat_err("valid size %" PRIu64 " greater than size %" PRIu64 ": %s\n",
 			le64_to_cpu(stream_de->stream_valid_size), node->size,
 			path_resolve_ctx.local_path);
 		goto err;
@@ -1176,7 +1176,7 @@ static bool exfat_root_dir_check(struct exfat *exfat)
 	root->size = clus_count * EXFAT_CLUSTER_SIZE(exfat->bs);
 
 	exfat->root = root;
-	exfat_debug("root directory: start cluster[0x%x] size[0x%llx]\n",
+	exfat_debug("root directory: start cluster[0x%x] size[0x%" PRIx64 "]\n",
 		root->first_clus, root->size);
 	return true;
 err:
