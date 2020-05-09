@@ -26,9 +26,9 @@
 #define cpu_to_le64(x)	(x)
 #endif
 
-#define le64_to_cpu(x)  cpu_to_le64(x)
-#define le32_to_cpu(x)  cpu_to_le32(x)
-#define le16_to_cpu(x)  cpu_to_le16(x)
+#define le64_to_cpu(x)  ((uint64_t)cpu_to_le64(x))
+#define le32_to_cpu(x)  ((uint32_t)cpu_to_le32(x))
+#define le16_to_cpu(x)  ((uint16_t)cpu_to_le16(x))
 
 #define PBR_SIGNATURE		0xAA55
 
