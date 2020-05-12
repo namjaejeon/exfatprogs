@@ -68,6 +68,7 @@ static int exfat_get_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
 {
 	struct exfat_dentry *vol_entry;
 	char volume_label[VOLUME_LABEL_BUFFER_SIZE];
+	__le16 disk_label[VOLUME_LABEL_MAX_LEN];
 	int nbytes;
 
 	vol_entry = malloc(sizeof(struct exfat_dentry));
@@ -83,8 +84,9 @@ static int exfat_get_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
 		return -1;
 	}
 
+	memcpy(disk_label, vol_entry->vol_label, sizeof(disk_label));
 	memset(volume_label, 0, sizeof(volume_label));
-	if (exfat_utf16_dec(vol_entry->vol_label, vol_entry->vol_char_cnt*2,
+	if (exfat_utf16_dec(disk_label, vol_entry->vol_char_cnt*2,
 		volume_label, sizeof(volume_label)) < 0) {
 		exfat_err("failed to decode volume label\n");
 		return -1;

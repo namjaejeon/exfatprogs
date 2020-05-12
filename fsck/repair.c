@@ -21,7 +21,7 @@ static bool fix_bs_checksum(struct exfat *exfat,
 			union exfat_repair_context *rctx)
 {
 	unsigned int size;
-	int i;
+	unsigned int i;
 
 	size = EXFAT_SECTOR_SIZE(exfat->bs);
 	for (i = 0; i < size/sizeof(__le32); i++) {
@@ -47,7 +47,7 @@ static struct exfat_repair_problem problems[] = {
 
 static struct exfat_repair_problem *find_problem(er_problem_code_t prcode)
 {
-	int i;
+	unsigned int i;
 
 	for (i = 0; i < sizeof(problems)/sizeof(problems[0]); i++) {
 		if (problems[i].prcode == prcode) {

@@ -84,7 +84,7 @@ static int exfat_write_sector(struct exfat_blk_dev *bd, void *buf,
 
 	lseek(bd->dev_fd, offset, SEEK_SET);
 	bytes = write(bd->dev_fd, buf, bd->sector_size);
-	if (bytes != bd->sector_size) {
+	if (bytes != (int)bd->sector_size) {
 		exfat_err("write failed, sec_off : %u, bytes : %d\n", sec_off,
 			bytes);
 		return -1;
@@ -199,7 +199,8 @@ static int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
 		unsigned int checksum, bool is_backup)
 {
 	__le32 *checksum_buf;
-	int i, ret = 0;
+	int ret = 0;
+	unsigned int i;
 	unsigned int sec_idx = CHECKSUM_SEC_IDX;
 
 	checksum_buf = malloc(bd->sector_size);
@@ -323,7 +324,7 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 static int exfat_create_bitmap(struct exfat_blk_dev *bd)
 {
 	char *bitmap;
-	int i, nbytes;
+	unsigned int i, nbytes;
 
 	bitmap = calloc(finfo.bitmap_byte_len, sizeof(*bitmap));
 	if (!bitmap)
@@ -532,7 +533,8 @@ static long long parse_cluster_size(const char *size)
 	switch (*data_unit) {
 	case 'M':
 	case 'm':
-		byte_size <<= 10;
+		byte_size <<= 20;
+		break;
 	case 'K':
 	case 'k':
 		byte_size <<= 10;
