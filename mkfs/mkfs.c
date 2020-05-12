@@ -13,6 +13,7 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <inttypes.h>
 #include <errno.h>
 #include <math.h>
 #include <locale.h>
@@ -57,7 +58,7 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	memset(ppbr->boot_code, 0, 390);
 	ppbr->signature = cpu_to_le16(PBR_SIGNATURE);
 
-	exfat_debug("Volume Length(sectors) : %llu\n",
+	exfat_debug("Volume Length(sectors) : %" PRIu64 "\n",
 		le64_to_cpu(pbsx->vol_length));
 	exfat_debug("FAT Offset(sector offset) : %u\n",
 		le32_to_cpu(pbsx->fat_offset));
