@@ -18,7 +18,7 @@ struct exfat_inode {
 	clus_t			last_lclus;
 	clus_t			last_pclus;
 	__u16			attr;
-	__u64			size;
+	uint64_t		size;
 	bool			is_contiguous;
 	off_t			dentry_file_offset;
 	__le16			name[0];	/* only for directory */

@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <getopt.h>
+#include <inttypes.h>
 #include <string.h>
 #include <errno.h>
 #include <locale.h>
@@ -327,7 +328,7 @@ static ssize_t exfat_file_read(struct exfat *exfat, struct exfat_inode *node,
 	ssize_t read_size;
 	size_t remain_size;
 
-	if (file_offset >= node->size)
+	if (file_offset >= (off_t)node->size)
 		return EOF;
 
 	clus_size = EXFAT_CLUSTER_SIZE(exfat->bs);
@@ -383,7 +384,7 @@ static int boot_region_checksum(struct exfat *exfat)
 	__le32 checksum;
 	unsigned short size;
 	void *sect;
-	int i;
+	unsigned int i;
 
 	size = EXFAT_SECTOR_SIZE(exfat->bs);
 	sect = malloc(size);
@@ -481,7 +482,7 @@ static bool exfat_boot_region_check(struct exfat *exfat)
 
 	if (le64_to_cpu(bs->bsx.vol_length) * EXFAT_SECTOR_SIZE(bs) >
 			exfat->blk_dev->size) {
-		exfat_err("too large sector count: %llu\n, expected: %llu\n",
+		exfat_err("too large sector count: %" PRIu64 "\n, expected: %llu\n",
 				le64_to_cpu(bs->bsx.vol_length),
 				exfat->blk_dev->num_sectors);
 		goto err;
@@ -631,7 +632,7 @@ static int exfat_de_iter_get(struct exfat_de_iter *iter,
 				int ith, struct exfat_dentry **dentry)
 {
 	off_t de_next_file_offset;
-	int de_next_offset;
+	unsigned int de_next_offset;
 	bool need_read_1_clus = false;
 	int ret;
 
@@ -721,7 +722,7 @@ static bool check_inode(struct exfat *exfat, struct exfat_inode *parent,
 	if (node->size > le32_to_cpu(exfat->bs->bsx.clu_count) *
 				EXFAT_CLUSTER_SIZE(exfat->bs)) {
 		resolve_path_parent(&path_resolve_ctx, parent, node);
-		exfat_err("size %llu is greater than cluster heap: %s\n",
+		exfat_err("size %" PRIu64 " is greater than cluster heap: %s\n",
 				node->size, path_resolve_ctx.local_path);
 		ret = false;
 	}
@@ -736,7 +737,7 @@ static bool check_inode(struct exfat *exfat, struct exfat_inode *parent,
 	if ((node->attr & ATTR_SUBDIR) &&
 			node->size % EXFAT_CLUSTER_SIZE(exfat->bs) != 0) {
 		resolve_path_parent(&path_resolve_ctx, parent, node);
-		exfat_err("directory size %llu is not divisible by %d: %s\n",
+		exfat_err("directory size %" PRIu64 " is not divisible by %d: %s\n",
 				node->size, EXFAT_CLUSTER_SIZE(exfat->bs),
 				path_resolve_ctx.local_path);
 		ret = false;
@@ -755,7 +756,7 @@ static bool check_inode(struct exfat *exfat, struct exfat_inode *parent,
 static void dentry_calc_checksum(struct exfat_dentry *dentry,
 				__le16 *checksum, bool primary)
 {
-	int i;
+	unsigned int i;
 	uint8_t *bytes;
 
 	bytes = (uint8_t *)dentry;
@@ -800,12 +801,12 @@ static int read_file_dentries(struct exfat_de_iter *iter,
 	ret = exfat_de_iter_get(iter, 0, &file_de);
 	if (ret || file_de->type != EXFAT_FILE) {
 		exfat_err("failed to get file dentry. %d\n", ret);
-		return ret;
+		return -EINVAL;
 	}
 	ret = exfat_de_iter_get(iter, 1, &stream_de);
 	if (ret || stream_de->type != EXFAT_STREAM) {
 		exfat_err("failed to get stream dentry. %d\n", ret);
-		return ret;
+		return -EINVAL;
 	}
 
 	*new_node = NULL;
@@ -824,6 +825,7 @@ static int read_file_dentries(struct exfat_de_iter *iter,
 		ret = exfat_de_iter_get(iter, i, &name_de);
 		if (ret || name_de->type != EXFAT_NAME) {
 			exfat_err("failed to get name dentry. %d\n", ret);
+			ret = -EINVAL;
 			goto err;
 		}
 
@@ -848,9 +850,10 @@ static int read_file_dentries(struct exfat_de_iter *iter,
 
 	if (le64_to_cpu(stream_de->stream_valid_size) > node->size) {
 		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
-		exfat_err("valid size %llu greater than size %llu: %s\n",
+		exfat_err("valid size %" PRIu64 " greater than size %" PRIu64 ": %s\n",
 			le64_to_cpu(stream_de->stream_valid_size), node->size,
 			path_resolve_ctx.local_path);
+		ret = -EINVAL;
 		goto err;
 	}
 
@@ -894,6 +897,7 @@ static bool read_volume_label(struct exfat_de_iter *iter)
 {
 	struct exfat *exfat;
 	struct exfat_dentry *dentry;
+	__le16 disk_label[VOLUME_LABEL_MAX_LEN];
 
 	exfat = iter->exfat;
 	if (exfat_de_iter_get(iter, 0, &dentry))
@@ -907,7 +911,8 @@ static bool read_volume_label(struct exfat_de_iter *iter)
 		return false;
 	}
 
-	if (exfat_utf16_dec(dentry->vol_label, dentry->vol_char_cnt*2,
+	memcpy(disk_label, dentry->vol_label, sizeof(disk_label));
+	if (exfat_utf16_dec(disk_label, dentry->vol_char_cnt*2,
 		exfat->volume_label, sizeof(exfat->volume_label)) < 0) {
 		exfat_err("failed to decode volume label\n");
 		return false;
@@ -921,13 +926,13 @@ static bool read_alloc_bitmap(struct exfat_de_iter *iter)
 {
 	struct exfat_dentry *dentry;
 	struct exfat *exfat;
-	size_t alloc_bitmap_size;
+	ssize_t alloc_bitmap_size;
 
 	exfat = iter->exfat;
 	if (exfat_de_iter_get(iter, 0, &dentry))
 		return false;
 
-	exfat_debug("start cluster %#x, size %#llx\n",
+	exfat_debug("start cluster %#x, size %#" PRIx64 "\n",
 			le32_to_cpu(dentry->bitmap_start_clu),
 			le64_to_cpu(dentry->bitmap_size));
 
@@ -935,7 +940,7 @@ static bool read_alloc_bitmap(struct exfat_de_iter *iter)
 
 	if (le64_to_cpu(dentry->bitmap_size) <
 			DIV_ROUND_UP(exfat->bit_count, 8)) {
-		exfat_err("invalid size of allocation bitmap. 0x%llx\n",
+		exfat_err("invalid size of allocation bitmap. 0x%" PRIx64 "\n",
 				le64_to_cpu(dentry->bitmap_size));
 		return false;
 	}
@@ -971,7 +976,7 @@ static bool read_upcase_table(struct exfat_de_iter *iter)
 {
 	struct exfat_dentry *dentry;
 	struct exfat *exfat;
-	size_t size;
+	ssize_t size;
 	__le16 *upcase;
 	__le32 checksum;
 
@@ -986,10 +991,10 @@ static bool read_upcase_table(struct exfat_de_iter *iter)
 		return false;
 	}
 
-	size = (size_t)le64_to_cpu(dentry->upcase_size);
-	if (size > EXFAT_MAX_UPCASE_CHARS * sizeof(__le16) ||
+	size = (ssize_t)le64_to_cpu(dentry->upcase_size);
+	if (size > (ssize_t)(EXFAT_MAX_UPCASE_CHARS * sizeof(__le16)) ||
 			size == 0 || size % sizeof(__le16)) {
-		exfat_err("invalid size of upcase table. 0x%llx\n",
+		exfat_err("invalid size of upcase table. 0x%" PRIx64 "\n",
 			le64_to_cpu(dentry->upcase_size));
 		return false;
 	}
@@ -1175,7 +1180,7 @@ static bool exfat_root_dir_check(struct exfat *exfat)
 	root->size = clus_count * EXFAT_CLUSTER_SIZE(exfat->bs);
 
 	exfat->root = root;
-	exfat_debug("root directory: start cluster[0x%x] size[0x%llx]\n",
+	exfat_debug("root directory: start cluster[0x%x] size[0x%" PRIx64 "]\n",
 		root->first_clus, root->size);
 	return true;
 err:
