@@ -533,7 +533,8 @@ static long long parse_cluster_size(const char *size)
 	switch (*data_unit) {
 	case 'M':
 	case 'm':
-		byte_size <<= 10;
+		byte_size <<= 20;
+		break;
 	case 'K':
 	case 'k':
 		byte_size <<= 10;
