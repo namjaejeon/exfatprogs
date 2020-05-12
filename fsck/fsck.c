@@ -801,12 +801,12 @@ static int read_file_dentries(struct exfat_de_iter *iter,
 	ret = exfat_de_iter_get(iter, 0, &file_de);
 	if (ret || file_de->type != EXFAT_FILE) {
 		exfat_err("failed to get file dentry. %d\n", ret);
-		return ret;
+		return -EINVAL;
 	}
 	ret = exfat_de_iter_get(iter, 1, &stream_de);
 	if (ret || stream_de->type != EXFAT_STREAM) {
 		exfat_err("failed to get stream dentry. %d\n", ret);
-		return ret;
+		return -EINVAL;
 	}
 
 	*new_node = NULL;
@@ -825,6 +825,7 @@ static int read_file_dentries(struct exfat_de_iter *iter,
 		ret = exfat_de_iter_get(iter, i, &name_de);
 		if (ret || name_de->type != EXFAT_NAME) {
 			exfat_err("failed to get name dentry. %d\n", ret);
+			ret = -EINVAL;
 			goto err;
 		}
 
@@ -852,6 +853,7 @@ static int read_file_dentries(struct exfat_de_iter *iter,
 		exfat_err("valid size %" PRIu64 " greater than size %" PRIu64 ": %s\n",
 			le64_to_cpu(stream_de->stream_valid_size), node->size,
 			path_resolve_ctx.local_path);
+		ret = -EINVAL;
 		goto err;
 	}
 
