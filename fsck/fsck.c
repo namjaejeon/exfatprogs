@@ -897,6 +897,7 @@ static bool read_volume_label(struct exfat_de_iter *iter)
 {
 	struct exfat *exfat;
 	struct exfat_dentry *dentry;
+	__le16 disk_label[VOLUME_LABEL_MAX_LEN];
 
 	exfat = iter->exfat;
 	if (exfat_de_iter_get(iter, 0, &dentry))
@@ -910,7 +911,8 @@ static bool read_volume_label(struct exfat_de_iter *iter)
 		return false;
 	}
 
-	if (exfat_utf16_dec(dentry->vol_label, dentry->vol_char_cnt*2,
+	memcpy(disk_label, dentry->vol_label, sizeof(disk_label));
+	if (exfat_utf16_dec(disk_label, dentry->vol_char_cnt*2,
 		exfat->volume_label, sizeof(exfat->volume_label)) < 0) {
 		exfat_err("failed to decode volume label\n");
 		return false;
