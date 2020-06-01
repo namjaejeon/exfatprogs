@@ -195,6 +195,15 @@ ssize_t exfat_write(int fd, void *buf, size_t size, off_t offset)
 	return pwrite(fd, buf, size, offset);
 }
 
+size_t exfat_utf16_len(const __le16 *str, size_t max_size)
+{
+	size_t i = 0;
+
+	while (le16_to_cpu(str[i]) && i < max_size)
+		i++;
+	return i;
+}
+
 ssize_t exfat_utf16_enc(const char *in_str, __u16 *out_str, size_t out_size)
 {
 	size_t mbs_len, out_len, i;

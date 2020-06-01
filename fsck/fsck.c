@@ -225,15 +225,6 @@ static void exfat_free_dir_list(struct exfat *exfat)
 	}
 }
 
-static size_t utf16_len(const __le16 *str, size_t max_size)
-{
-	size_t i = 0;
-
-	while (le16_to_cpu(str[i]) && i < max_size)
-		i++;
-	return i;
-}
-
 /*
  * get references of ancestors that include @child until the count of
  * ancesters is not larger than @count and the count of characters of
@@ -255,7 +246,7 @@ bool get_ancestors(struct exfat_inode *child,
 
 	dir = child;
 	while (dir) {
-		name_len = utf16_len(dir->name, NAME_BUFFER_SIZE);
+		name_len = exfat_utf16_len(dir->name, NAME_BUFFER_SIZE);
 		if (char_len + name_len > max_char_len)
 			break;
 
@@ -294,7 +285,8 @@ static int resolve_path(struct path_resolve_ctx *ctx, struct exfat_inode *child)
 
 	utf16_path = ctx->utf16_path;
 	for (i = 0; i < depth; i++) {
-		name_len = utf16_len(ctx->ancestors[i]->name, NAME_BUFFER_SIZE);
+		name_len = exfat_utf16_len(ctx->ancestors[i]->name,
+				NAME_BUFFER_SIZE);
 		memcpy((char *)utf16_path, (char *)ctx->ancestors[i]->name,
 				name_len * 2);
 		utf16_path += name_len;
