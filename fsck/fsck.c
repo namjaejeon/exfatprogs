@@ -1148,7 +1148,6 @@ static bool exfat_filesystem_check(struct exfat *exfat)
 			ret = false;
 			exfat_err("failed to check dentries: %s\n",
 					path_resolve_ctx.local_path);
-			goto out;
 		}
 
 		list_del(&dir->list);
