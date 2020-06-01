@@ -71,6 +71,7 @@ static struct option opts[] = {
 	{"repair",	no_argument,	NULL,	'r' },
 	{"repair-yes",	no_argument,	NULL,	'y' },
 	{"repair-no",	no_argument,	NULL,	'n' },
+	{"repair-auto",	no_argument,	NULL,	'p' },
 	{"version",	no_argument,	NULL,	'V' },
 	{"verbose",	no_argument,	NULL,	'v' },
 	{"help",	no_argument,	NULL,	'h' },
@@ -84,6 +85,7 @@ static void usage(char *name)
 	fprintf(stderr, "\t-r | --repair        Repair interactively\n");
 	fprintf(stderr, "\t-y | --repair-yes    Repair without ask\n");
 	fprintf(stderr, "\t-n | --repair-no     No repair\n");
+	fprintf(stderr, "\t-p | --repair-auto   Repair automatically\n");
 	fprintf(stderr, "\t-V | --version       Show version\n");
 	fprintf(stderr, "\t-v | --verbose       Print debug\n");
 	fprintf(stderr, "\t-h | --help          Show help\n");
@@ -1105,7 +1107,7 @@ int main(int argc, char * const argv[])
 		exfat_err("failed to init locale/codeset\n");
 
 	opterr = 0;
-	while ((c = getopt_long(argc, argv, "rynVvh", opts, NULL)) != EOF) {
+	while ((c = getopt_long(argc, argv, "rynpVvh", opts, NULL)) != EOF) {
 		switch (c) {
 		case 'n':
 			if (ui.options & FSCK_OPTS_REPAIR)
@@ -1123,6 +1125,12 @@ int main(int argc, char * const argv[])
 			if (ui.options & FSCK_OPTS_REPAIR)
 				usage(argv[0]);
 			ui.options |= FSCK_OPTS_REPAIR_YES;
+			ui.ei.writeable = true;
+			break;
+		case 'p':
+			if (ui.options & FSCK_OPTS_REPAIR)
+				usage(argv[0]);
+			ui.options |= FSCK_OPTS_REPAIR_AUTO;
 			ui.ei.writeable = true;
 			break;
 		case 'V':
