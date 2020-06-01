@@ -725,13 +725,18 @@ static int read_file_dentries(struct exfat_de_iter *iter,
 		((stream_de->stream_flags & EXFAT_SF_CONTIGUOUS) != 0);
 	node->size = le64_to_cpu(stream_de->stream_size);
 
-	if (le64_to_cpu(stream_de->stream_valid_size) > node->size) {
-		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
-		exfat_err("valid size %" PRIu64 " greater than size %" PRIu64 ": %s\n",
-			le64_to_cpu(stream_de->stream_valid_size), node->size,
-			path_resolve_ctx.local_path);
-		ret = -EINVAL;
-		goto err;
+	if (node->size < le64_to_cpu(stream_de->stream_valid_size)) {
+		if (repair_file_ask(iter, node, ER_FILE_VALID_SIZE,
+			"valid size %" PRIu64 " greater than size %" PRIu64,
+			le64_to_cpu(stream_de->stream_valid_size),
+			node->size)) {
+			exfat_de_iter_get_dirty(iter, 1, &stream_de);
+			stream_de->stream_valid_size =
+					stream_de->stream_size;
+		} else {
+			ret = -EINVAL;
+			goto err;
+		}
 	}
 
 	*skip_dentries = (file_de->file_num_ext + 1);

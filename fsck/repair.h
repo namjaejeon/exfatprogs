@@ -7,6 +7,7 @@
 
 #define ER_BS_CHECKSUM			0x00000001
 #define ER_DE_CHECKSUM			0x00001001
+#define ER_FILE_VALID_SIZE		0x00002001
 
 typedef unsigned int er_problem_code_t;
 
