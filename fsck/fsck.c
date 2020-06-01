@@ -703,7 +703,7 @@ static off_t exfat_de_iter_file_offset(struct exfat_de_iter *iter)
 static bool check_inode(struct exfat *exfat, struct exfat_inode *parent,
 						struct exfat_inode *node)
 {
-	bool ret = false;
+	bool ret = true;
 
 	if (node->size == 0 && node->first_clus != EXFAT_FREE_CLUSTER) {
 		resolve_path_parent(&path_resolve_ctx, parent, node);
@@ -882,7 +882,7 @@ static int read_file(struct exfat_de_iter *de_iter,
 	}
 
 	ret = check_inode(de_iter->exfat, de_iter->parent, node);
-	if (ret) {
+	if (!ret) {
 		exfat_err("corrupted file directory entries.\n");
 		free_exfat_inode(node);
 		return ret;
