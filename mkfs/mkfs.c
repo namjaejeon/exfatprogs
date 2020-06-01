@@ -13,6 +13,7 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <inttypes.h>
 #include <errno.h>
 #include <math.h>
 #include <locale.h>
@@ -57,7 +58,7 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	memset(ppbr->boot_code, 0, 390);
 	ppbr->signature = cpu_to_le16(PBR_SIGNATURE);
 
-	exfat_debug("Volume Length(sectors) : %llu\n",
+	exfat_debug("Volume Length(sectors) : %" PRIu64 "\n",
 		le64_to_cpu(pbsx->vol_length));
 	exfat_debug("FAT Offset(sector offset) : %u\n",
 		le32_to_cpu(pbsx->fat_offset));
@@ -83,7 +84,7 @@ static int exfat_write_sector(struct exfat_blk_dev *bd, void *buf,
 
 	lseek(bd->dev_fd, offset, SEEK_SET);
 	bytes = write(bd->dev_fd, buf, bd->sector_size);
-	if (bytes != bd->sector_size) {
+	if (bytes != (int)bd->sector_size) {
 		exfat_err("write failed, sec_off : %u, bytes : %d\n", sec_off,
 			bytes);
 		return -1;
@@ -198,7 +199,8 @@ static int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
 		unsigned int checksum, bool is_backup)
 {
 	__le32 *checksum_buf;
-	int i, ret = 0;
+	int ret = 0;
+	unsigned int i;
 	unsigned int sec_idx = CHECKSUM_SEC_IDX;
 
 	checksum_buf = malloc(bd->sector_size);
@@ -322,7 +324,7 @@ static int exfat_create_fat_table(struct exfat_blk_dev *bd,
 static int exfat_create_bitmap(struct exfat_blk_dev *bd)
 {
 	char *bitmap;
-	int i, nbytes;
+	unsigned int i, nbytes;
 
 	bitmap = calloc(finfo.bitmap_byte_len, sizeof(*bitmap));
 	if (!bitmap)
@@ -383,12 +385,12 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 static void usage(void)
 {
 	fprintf(stderr, "Usage: mkfs.exfat\n");
-	fprintf(stderr, "\t-L string | --volume-label=string    Set volume label\n");
-	fprintf(stderr, "\t-c | --cluster-size                  Set cluster size\n");
-	fprintf(stderr, "\t-f | --full-format                   Full format\n");
-	fprintf(stderr, "\t-V | --version                       Show version\n");
-	fprintf(stderr, "\t-v | --verbose                       Print debug\n");
-	fprintf(stderr, "\t-h | --help                          Show help\n");
+	fprintf(stderr, "\t-L | --volume-label=label                              Set volume label\n");
+	fprintf(stderr, "\t-c | --cluster-size=size(or suffixed by 'K' or 'M')    Specify cluster size\n");
+	fprintf(stderr, "\t-f | --full-format                                     Full format\n");
+	fprintf(stderr, "\t-V | --version                                         Show version\n");
+	fprintf(stderr, "\t-v | --verbose                                         Print debug\n");
+	fprintf(stderr, "\t-h | --help                                            Show help\n");
 
 	exit(EXIT_FAILURE);
 }
@@ -531,7 +533,8 @@ static long long parse_cluster_size(const char *size)
 	switch (*data_unit) {
 	case 'M':
 	case 'm':
-		byte_size <<= 10;
+		byte_size <<= 20;
+		break;
 	case 'K':
 	case 'k':
 		byte_size <<= 10;

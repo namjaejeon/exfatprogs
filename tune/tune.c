@@ -17,11 +17,11 @@
 static void usage(void)
 {
 	fprintf(stderr, "Usage: tune.exfat\n");
-	fprintf(stderr, "\t-l | --print-label   Print volume label\n");
-	fprintf(stderr, "\t-L | --set-label     Set volume label\n");
-	fprintf(stderr, "\t-V | --version       Show version\n");
-	fprintf(stderr, "\t-v | --verbose       Print debug\n");
-	fprintf(stderr, "\t-h | --help          Show help\n");
+	fprintf(stderr, "\t-l | --print-label                    Print volume label\n");
+	fprintf(stderr, "\t-L | --volume-label=label             Set volume label\n");
+	fprintf(stderr, "\t-V | --version                        Show version\n");
+	fprintf(stderr, "\t-v | --verbose                        Print debug\n");
+	fprintf(stderr, "\t-h | --help                           Show help\n");
 
 	exit(EXIT_FAILURE);
 }
@@ -68,6 +68,7 @@ static int exfat_get_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
 {
 	struct exfat_dentry *vol_entry;
 	char volume_label[VOLUME_LABEL_BUFFER_SIZE];
+	__le16 disk_label[VOLUME_LABEL_MAX_LEN];
 	int nbytes;
 
 	vol_entry = malloc(sizeof(struct exfat_dentry));
@@ -83,8 +84,9 @@ static int exfat_get_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
 		return -1;
 	}
 
+	memcpy(disk_label, vol_entry->vol_label, sizeof(disk_label));
 	memset(volume_label, 0, sizeof(volume_label));
-	if (exfat_utf16_dec(vol_entry->vol_label, vol_entry->vol_char_cnt*2,
+	if (exfat_utf16_dec(disk_label, vol_entry->vol_char_cnt*2,
 		volume_label, sizeof(volume_label)) < 0) {
 		exfat_err("failed to decode volume label\n");
 		return -1;
