@@ -9,14 +9,7 @@
 
 typedef unsigned int er_problem_code_t;
 
-union exfat_repair_context {
-	struct {
-		__le32		checksum;
-		void		*checksum_sect;
-	} bs_checksum;
-};
-
-bool exfat_repair(struct exfat *exfat, er_problem_code_t prcode,
-			union exfat_repair_context *rctx);
+bool exfat_repair_ask(struct exfat *exfat, er_problem_code_t prcode,
+		const char *fmt, ...);
 
 #endif

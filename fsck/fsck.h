@@ -48,11 +48,14 @@ enum fsck_ui_options {
 	FSCK_OPTS_REPAIR_ASK	= 0x01,
 	FSCK_OPTS_REPAIR_YES	= 0x02,
 	FSCK_OPTS_REPAIR_NO	= 0x04,
-	FSCK_OPTS_REPAIR	= 0x07,
+	FSCK_OPTS_REPAIR_AUTO	= 0x08,
+	FSCK_OPTS_REPAIR	= 0x0f,
 };
 
 struct exfat {
 	enum fsck_ui_options	options;
+	bool			dirty:1;
+	bool			dirty_fat:1;
 	struct exfat_blk_dev	*blk_dev;
 	struct pbr		*bs;
 	char			volume_label[VOLUME_LABEL_BUFFER_SIZE];

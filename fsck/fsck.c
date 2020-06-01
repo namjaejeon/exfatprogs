@@ -325,10 +325,11 @@ off_t exfat_c2o(struct exfat *exfat, unsigned int clus)
 
 static int boot_region_checksum(struct exfat *exfat)
 {
-	__le32 checksum;
-	unsigned short size;
 	void *sect;
 	unsigned int i;
+	uint32_t checksum;
+	int ret = 0;
+	unsigned short size;
 
 	size = EXFAT_SECTOR_SIZE(exfat->bs);
 	sect = malloc(size);
@@ -341,32 +342,45 @@ static int boot_region_checksum(struct exfat *exfat)
 	for (i = 1; i < 11; i++) {
 		if (exfat_read(exfat->blk_dev->dev_fd, sect, size, i * size) !=
 				(ssize_t)size) {
-			free(sect);
-			return -EIO;
+			ret = -EIO;
+			goto out;
 		}
 		boot_calc_checksum(sect, size, false, &checksum);
 	}
 
-	if (exfat_read(exfat->blk_dev->dev_fd, sect, size, i * size) !=
+	if (exfat_read(exfat->blk_dev->dev_fd, sect, size, 11 * size) !=
 			(ssize_t)size) {
-		free(sect);
-		return -EIO;
+		ret = -EIO;
+		goto out;
 	}
+
 	for (i = 0; i < size/sizeof(checksum); i++) {
 		if (le32_to_cpu(((__le32 *)sect)[i]) != checksum) {
-			union exfat_repair_context rctx = {
-				.bs_checksum.checksum		= checksum,
-				.bs_checksum.checksum_sect	= sect,
-			};
-			if (!exfat_repair(exfat, ER_BS_CHECKSUM, &rctx)) {
-				exfat_err("invalid checksum. 0x%x\n",
-					le32_to_cpu(((__le32 *)sect)[i]));
-				free(sect);
-				return -EIO;
+			if (exfat_repair_ask(exfat, ER_BS_CHECKSUM,
+				"checksums of boot sector are not correct. "
+				"%#x, but expected %#x",
+				le32_to_cpu(((__le32 *)sect)[i]), checksum)) {
+				goto out_write;
+			} else {
+				ret = -EINVAL;
+				goto out;
 			}
 		}
 	}
+out:
+	free(sect);
+	return ret;
 
+out_write:
+	for (i = 0; i < size/sizeof(checksum); i++)
+		((__le32 *)sect)[i] = cpu_to_le32(checksum);
+
+	if (exfat_write(exfat->blk_dev->dev_fd,
+			sect, size, size * 11) != size) {
+		exfat_err("failed to write checksum sector\n");
+		free(sect);
+		return -EIO;
+	}
 	free(sect);
 	return 0;
 }
