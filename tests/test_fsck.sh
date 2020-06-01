@@ -39,9 +39,7 @@ fi
 if [  -e "$TESTCASE_DIR/exfat.img.expected.xz" ]; then
 	EXPECTED_FILE=$IMAGE_FILE.expected
 	unxz -cfk "$TESTCASE_DIR/$EXPECTED_FILE.xz" > $EXPECTED_FILE
-	xxd $IMAGE_FILE > $IMAGE_FILE.hex
-	xxd $EXPECTED_FILE > $EXPECTED_FILE.hex
-	diff $IMAGE_FILE.hex $EXPECTED_FILE.hex
+	diff <(xxd $IMAGE_FILE) <(xxd $EXPECTED_FILE)
 	if [ "$?" -ne "0" ]; then
 		echo ""
 		echo "Failed $TESTCASE_DIR"
