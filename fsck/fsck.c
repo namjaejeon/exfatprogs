@@ -1186,7 +1186,10 @@ int main(int argc, char * const argv[])
 	if (ui.ei.writeable)
 		fsync(bd.dev_fd);
 	printf("%s: clean\n", ui.ei.dev_name);
-	ret = FSCK_EXIT_NO_ERRORS;
+	if (exfat->dirty)
+		ret = FSCK_EXIT_CORRECTED;
+	else
+		ret = FSCK_EXIT_NO_ERRORS;
 out:
 	exfat_show_stat();
 err:
