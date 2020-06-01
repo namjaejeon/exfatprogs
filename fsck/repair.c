@@ -32,7 +32,8 @@ static const char *prompts[] = {
 };
 
 static struct exfat_repair_problem problems[] = {
-	{ER_BS_CHECKSUM, ERF_PREEN_YES | ERF_DEFAULT_YES, ERP_FIX},
+	{ER_BS_CHECKSUM, ERF_DEFAULT_YES | ERF_PREEN_YES, ERP_FIX},
+	{ER_DE_CHECKSUM, ERF_DEFAULT_YES | ERF_PREEN_YES, ERP_FIX},
 };
 
 static struct exfat_repair_problem *find_problem(er_problem_code_t prcode)

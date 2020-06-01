@@ -222,6 +222,117 @@ static void exfat_free_dir_list(struct exfat *exfat)
 	}
 }
 
+static size_t utf16_len(const __le16 *str, size_t max_size)
+{
+	size_t i = 0;
+
+	while (le16_to_cpu(str[i]) && i < max_size)
+		i++;
+	return i;
+}
+
+/*
+ * get references of ancestors that include @child until the count of
+ * ancesters is not larger than @count and the count of characters of
+ * their names is not larger than @max_char_len.
+ * return true if root is reached.
+ */
+bool get_ancestors(struct exfat_inode *child,
+		struct exfat_inode **ancestors, int count,
+		int max_char_len,
+		int *ancestor_count)
+{
+	struct exfat_inode *dir;
+	int name_len, char_len;
+	int root_depth, depth, i;
+
+	root_depth = 0;
+	char_len = 0;
+	max_char_len += 1;
+
+	dir = child;
+	while (dir) {
+		name_len = utf16_len(dir->name, NAME_BUFFER_SIZE);
+		if (char_len + name_len > max_char_len)
+			break;
+
+		/* include '/' */
+		char_len += name_len + 1;
+		root_depth++;
+
+		dir = dir->parent;
+	}
+
+	depth = MIN(root_depth, count);
+
+	for (dir = child, i = depth - 1; i >= 0; dir = dir->parent, i--)
+		ancestors[i] = dir;
+
+	*ancestor_count = depth;
+	return dir == NULL;
+}
+
+static int resolve_path(struct path_resolve_ctx *ctx, struct exfat_inode *child)
+{
+	int depth, i;
+	int name_len;
+	__le16 *utf16_path;
+	static const __le16 utf16_slash = cpu_to_le16(0x002F);
+	static const __le16 utf16_null = cpu_to_le16(0x0000);
+	size_t in_size;
+
+	ctx->local_path[0] = '\0';
+
+	get_ancestors(child,
+			ctx->ancestors,
+			sizeof(ctx->ancestors) / sizeof(ctx->ancestors[0]),
+			PATH_MAX,
+			&depth);
+
+	utf16_path = ctx->utf16_path;
+	for (i = 0; i < depth; i++) {
+		name_len = utf16_len(ctx->ancestors[i]->name, NAME_BUFFER_SIZE);
+		memcpy((char *)utf16_path, (char *)ctx->ancestors[i]->name,
+				name_len * 2);
+		utf16_path += name_len;
+		memcpy((char *)utf16_path, &utf16_slash, sizeof(utf16_slash));
+		utf16_path++;
+	}
+
+	if (depth > 0)
+		utf16_path--;
+	memcpy((char *)utf16_path, &utf16_null, sizeof(utf16_null));
+	utf16_path++;
+
+	in_size = (utf16_path - ctx->utf16_path) * sizeof(__le16);
+	return exfat_utf16_dec(ctx->utf16_path, in_size,
+				ctx->local_path, sizeof(ctx->local_path));
+}
+
+static int resolve_path_parent(struct path_resolve_ctx *ctx,
+			struct exfat_inode *parent, struct exfat_inode *child)
+{
+	int ret;
+	struct exfat_inode *old;
+
+	old = child->parent;
+	child->parent = parent;
+
+	ret = resolve_path(ctx, child);
+	child->parent = old;
+	return ret;
+}
+
+#define repair_file_ask(iter, inode, code, fmt, ...)	\
+({							\
+		resolve_path_parent(&path_resolve_ctx,	\
+				(iter)->parent, inode);	\
+		exfat_repair_ask((iter)->exfat, code,	\
+			"%s: " fmt,			\
+			path_resolve_ctx.local_path,	\
+			##__VA_ARGS__);			\
+})
+
 static bool exfat_invalid_clus(struct exfat *exfat, clus_t clus)
 {
 	return clus < EXFAT_FIRST_CLUSTER ||
@@ -463,156 +574,6 @@ err:
 	return false;
 }
 
-static size_t utf16_len(const __le16 *str, size_t max_size)
-{
-	size_t i = 0;
-
-	while (le16_to_cpu(str[i]) && i < max_size)
-		i++;
-	return i;
-}
-
-/*
- * get references of ancestors that include @child until the count of
- * ancesters is not larger than @count and the count of characters of
- * their names is not larger than @max_char_len.
- * return true if root is reached.
- */
-bool get_ancestors(struct exfat_inode *child,
-		struct exfat_inode **ancestors, int count,
-		int max_char_len,
-		int *ancestor_count)
-{
-	struct exfat_inode *dir;
-	int name_len, char_len;
-	int root_depth, depth, i;
-
-	root_depth = 0;
-	char_len = 0;
-	max_char_len += 1;
-
-	dir = child;
-	while (dir) {
-		name_len = utf16_len(dir->name, NAME_BUFFER_SIZE);
-		if (char_len + name_len > max_char_len)
-			break;
-
-		/* include '/' */
-		char_len += name_len + 1;
-		root_depth++;
-
-		dir = dir->parent;
-	}
-
-	depth = MIN(root_depth, count);
-
-	for (dir = child, i = depth - 1; i >= 0; dir = dir->parent, i--)
-		ancestors[i] = dir;
-
-	*ancestor_count = depth;
-	return dir == NULL;
-}
-
-static int resolve_path(struct path_resolve_ctx *ctx, struct exfat_inode *child)
-{
-	int depth, i;
-	int name_len;
-	__le16 *utf16_path;
-	const __le16 utf16_slash = cpu_to_le16(0x002F);
-	size_t in_size;
-
-	ctx->local_path[0] = '\0';
-
-	get_ancestors(child,
-			ctx->ancestors,
-			sizeof(ctx->ancestors) / sizeof(ctx->ancestors[0]),
-			PATH_MAX,
-			&depth);
-
-	utf16_path = ctx->utf16_path;
-	for (i = 0; i < depth; i++) {
-		name_len = utf16_len(ctx->ancestors[i]->name, NAME_BUFFER_SIZE);
-		memcpy((char *)utf16_path, (char *)ctx->ancestors[i]->name,
-				name_len * 2);
-		utf16_path += name_len;
-		memcpy((char *)utf16_path, &utf16_slash, sizeof(utf16_slash));
-		utf16_path++;
-	}
-
-	if (depth > 0)
-		utf16_path--;
-	in_size = (utf16_path - ctx->utf16_path) * sizeof(__le16);
-	return exfat_utf16_dec(ctx->utf16_path, in_size,
-				ctx->local_path, sizeof(ctx->local_path));
-}
-
-static int resolve_path_parent(struct path_resolve_ctx *ctx,
-			struct exfat_inode *parent, struct exfat_inode *child)
-{
-	int ret;
-	struct exfat_inode *old;
-
-	old = child->parent;
-	child->parent = parent;
-
-	ret = resolve_path(ctx, child);
-	child->parent = old;
-	return ret;
-}
-
-static bool check_inode(struct exfat *exfat, struct exfat_inode *parent,
-						struct exfat_inode *node)
-{
-	bool ret = true;
-
-	if (node->size == 0 && node->first_clus != EXFAT_FREE_CLUSTER) {
-		resolve_path_parent(&path_resolve_ctx, parent, node);
-		exfat_err("file is empty, but first cluster is %#x: %s\n",
-				node->first_clus, path_resolve_ctx.local_path);
-		ret = false;
-	}
-
-	if (node->size > 0 && exfat_invalid_clus(exfat, node->first_clus)) {
-		resolve_path_parent(&path_resolve_ctx, parent, node);
-		exfat_err("first cluster %#x is invalid: %s\n",
-				node->first_clus, path_resolve_ctx.local_path);
-		ret = false;
-	}
-
-	if (node->size > le32_to_cpu(exfat->bs->bsx.clu_count) *
-				EXFAT_CLUSTER_SIZE(exfat->bs)) {
-		resolve_path_parent(&path_resolve_ctx, parent, node);
-		exfat_err("size %" PRIu64 " is greater than cluster heap: %s\n",
-				node->size, path_resolve_ctx.local_path);
-		ret = false;
-	}
-
-	if (node->size == 0 && node->is_contiguous) {
-		resolve_path_parent(&path_resolve_ctx, parent, node);
-		exfat_err("empty, but marked as contiguous: %s\n",
-					path_resolve_ctx.local_path);
-		ret = false;
-	}
-
-	if ((node->attr & ATTR_SUBDIR) &&
-			node->size % EXFAT_CLUSTER_SIZE(exfat->bs) != 0) {
-		resolve_path_parent(&path_resolve_ctx, parent, node);
-		exfat_err("directory size %" PRIu64 " is not divisible by %d: %s\n",
-				node->size, EXFAT_CLUSTER_SIZE(exfat->bs),
-				path_resolve_ctx.local_path);
-		ret = false;
-	}
-
-	if (!node->is_contiguous && !inode_check_clus_chain(exfat, node)) {
-		resolve_path_parent(&path_resolve_ctx, parent, node);
-		exfat_err("corrupted cluster chain: %s\n",
-				path_resolve_ctx.local_path);
-		ret = false;
-	}
-
-	return ret;
-}
-
 static void dentry_calc_checksum(struct exfat_dentry *dentry,
 				__le16 *checksum, bool primary)
 {
@@ -648,13 +609,78 @@ static __le16 file_calc_checksum(struct exfat_de_iter *iter)
 	return checksum;
 }
 
+static bool check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
+{
+	struct exfat *exfat = iter->exfat;
+	struct exfat_dentry *dentry;
+	bool ret = true;
+	uint16_t checksum;
+
+	if (node->size == 0 && node->first_clus != EXFAT_FREE_CLUSTER) {
+		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
+		exfat_err("file is empty, but first cluster is %#x: %s\n",
+				node->first_clus, path_resolve_ctx.local_path);
+		ret = false;
+	}
+
+	if (node->size > 0 && exfat_invalid_clus(exfat, node->first_clus)) {
+		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
+		exfat_err("first cluster %#x is invalid: %s\n",
+				node->first_clus, path_resolve_ctx.local_path);
+		ret = false;
+	}
+
+	if (node->size > le32_to_cpu(exfat->bs->bsx.clu_count) *
+				EXFAT_CLUSTER_SIZE(exfat->bs)) {
+		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
+		exfat_err("size %" PRIu64 " is greater than cluster heap: %s\n",
+				node->size, path_resolve_ctx.local_path);
+		ret = false;
+	}
+
+	if (node->size == 0 && node->is_contiguous) {
+		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
+		exfat_err("empty, but marked as contiguous: %s\n",
+					path_resolve_ctx.local_path);
+		ret = false;
+	}
+
+	if ((node->attr & ATTR_SUBDIR) &&
+			node->size % EXFAT_CLUSTER_SIZE(exfat->bs) != 0) {
+		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
+		exfat_err("directory size %" PRIu64 " is not divisible by %d: %s\n",
+				node->size, EXFAT_CLUSTER_SIZE(exfat->bs),
+				path_resolve_ctx.local_path);
+		ret = false;
+	}
+
+	if (!node->is_contiguous && !inode_check_clus_chain(exfat, node)) {
+		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
+		exfat_err("corrupted cluster chain: %s\n",
+				path_resolve_ctx.local_path);
+		ret = false;
+	}
+
+	checksum = file_calc_checksum(iter);
+	exfat_de_iter_get(iter, 0, &dentry);
+	if (checksum != le16_to_cpu(dentry->file_checksum)) {
+		if (repair_file_ask(iter, node, ER_DE_CHECKSUM,
+				"the checksum of a file is wrong")) {
+			exfat_de_iter_get_dirty(iter, 0, &dentry);
+			dentry->file_checksum = cpu_to_le16(checksum);
+		} else
+			ret = false;
+	}
+
+	return ret;
+}
+
 static int read_file_dentries(struct exfat_de_iter *iter,
 			struct exfat_inode **new_node, int *skip_dentries)
 {
 	struct exfat_dentry *file_de, *stream_de, *name_de;
 	struct exfat_inode *node;
 	int i, ret;
-	__le16 checksum;
 
 	/* TODO: mtime, atime, ... */
 
@@ -694,19 +720,10 @@ static int read_file_dentries(struct exfat_de_iter *iter,
 			sizeof(name_de->name_unicode));
 	}
 
-	checksum = file_calc_checksum(iter);
-	if (le16_to_cpu(file_de->file_checksum) != checksum) {
-		exfat_err("invalid checksum. 0x%x != 0x%x\n",
-			le16_to_cpu(file_de->file_checksum),
-			le16_to_cpu(checksum));
-		ret = -EINVAL;
-		goto err;
-	}
-
-	node->size = le64_to_cpu(stream_de->stream_size);
 	node->first_clus = le32_to_cpu(stream_de->stream_start_clu);
 	node->is_contiguous =
 		((stream_de->stream_flags & EXFAT_SF_CONTIGUOUS) != 0);
+	node->size = le64_to_cpu(stream_de->stream_size);
 
 	if (le64_to_cpu(stream_de->stream_valid_size) > node->size) {
 		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
@@ -741,7 +758,7 @@ static int read_file(struct exfat_de_iter *de_iter,
 		return ret;
 	}
 
-	ret = check_inode(de_iter->exfat, de_iter->parent, node);
+	ret = check_inode(de_iter, node);
 	if (!ret) {
 		exfat_err("corrupted file directory entries.\n");
 		free_exfat_inode(node);

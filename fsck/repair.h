@@ -6,6 +6,7 @@
 #define _REPAIR_H
 
 #define ER_BS_CHECKSUM			0x00000001
+#define ER_DE_CHECKSUM			0x00001001
 
 typedef unsigned int er_problem_code_t;
 
