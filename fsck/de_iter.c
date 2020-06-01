@@ -6,90 +6,72 @@
 #include "libexfat.h"
 #include "fsck.h"
 
-static ssize_t exfat_file_read(struct exfat *exfat, struct exfat_inode *node,
-			void *buf, size_t total_size, off_t file_offset)
+static ssize_t write_clus(struct exfat_de_iter *iter, int bufidx)
 {
-	size_t clus_size;
-	clus_t start_l_clus, l_clus, p_clus;
-	unsigned int clus_offset;
-	int ret;
 	off_t device_offset;
-	ssize_t read_size;
-	size_t remain_size;
+	struct exfat *exfat = iter->exfat;
+	struct buffer_desc *desc;
+	unsigned int i;
 
-	if (file_offset >= (off_t)node->size)
-		return EOF;
+	desc = &iter->buffer_desc[bufidx];
+	device_offset = exfat_c2o(exfat, desc->p_clus);
 
-	clus_size = EXFAT_CLUSTER_SIZE(exfat->bs);
-	total_size = MIN(total_size, node->size - file_offset);
-	remain_size = total_size;
-
-	if (remain_size == 0)
-		return 0;
-
-	start_l_clus = file_offset / clus_size;
-	clus_offset = file_offset % clus_size;
-	if (start_l_clus >= node->last_lclus &&
-			node->last_pclus != EXFAT_EOF_CLUSTER) {
-		l_clus = node->last_lclus;
-		p_clus = node->last_pclus;
-	} else {
-		l_clus = 0;
-		p_clus = node->first_clus;
+	for (i = 0; i < iter->read_size / iter->write_size; i++) {
+		if (desc->dirty[i]) {
+			if (exfat_write(exfat->blk_dev->dev_fd,
+					desc->buffer + i * iter->write_size,
+					iter->write_size,
+					device_offset + i * iter->write_size)
+					!= (ssize_t)iter->write_size)
+				return -EIO;
+			desc->dirty[i] = 0;
+		}
 	}
+	return 0;
+}
 
-	while (p_clus != EXFAT_EOF_CLUSTER) {
-		if (exfat_invalid_clus(exfat, p_clus))
-			return -EINVAL;
-		if (l_clus < start_l_clus)
-			goto next_clus;
+static ssize_t read_next_clus(struct exfat_de_iter *iter, clus_t l_clus)
+{
+	struct exfat *exfat = iter->exfat;
+	struct buffer_desc *desc;
+	off_t device_offset;
+	int ret;
 
-		read_size = MIN(remain_size, clus_size - clus_offset);
-		device_offset = exfat_c2o(exfat, p_clus) + clus_offset;
-		if (exfat_read(exfat->blk_dev->dev_fd, buf, read_size,
-					device_offset) != read_size)
-			return -EIO;
+	desc = &iter->buffer_desc[l_clus & 0x01];
+	if (l_clus == 0)
+		desc->p_clus = iter->parent->first_clus;
 
-		clus_offset = 0;
-		buf = (char *)buf + read_size;
-		remain_size -= read_size;
-		if (remain_size == 0)
-			goto out;
+	if (write_clus(iter, l_clus & 0x01))
+		return -EIO;
 
-next_clus:
-		l_clus++;
-		ret = inode_get_clus_next(exfat, node, p_clus, &p_clus);
+	if (l_clus > 0) {
+		ret = inode_get_clus_next(exfat, iter->parent,
+				iter->buffer_desc[(l_clus - 1) & 0x01].p_clus,
+				&desc->p_clus);
 		if (ret)
 			return ret;
 	}
-out:
-	node->last_lclus = l_clus;
-	node->last_pclus = p_clus;
-	return total_size - remain_size;
+	device_offset = exfat_c2o(exfat, desc->p_clus);
+	return exfat_read(exfat->blk_dev->dev_fd, desc->buffer,
+			iter->read_size, device_offset);
 }
 
 int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
-						struct exfat_inode *dir)
+				struct exfat_inode *dir)
 {
-	ssize_t ret;
+	iter->exfat = exfat;
+	iter->parent = dir;
+	iter->read_size = EXFAT_CLUSTER_SIZE(exfat->bs);
+	iter->write_size = EXFAT_SECTOR_SIZE(exfat->bs);
 
-	if (!iter->dentries) {
-		iter->read_size = EXFAT_CLUSTER_SIZE(exfat->bs);
-		iter->dentries = malloc(iter->read_size * 2);
-		if (!iter->dentries) {
-			exfat_err("failed to allocate memory\n");
-			return -ENOMEM;
-		}
-	}
+	if (!iter->buffer_desc)
+		iter->buffer_desc = exfat->buffer_desc;
 
-	ret = exfat_file_read(exfat, dir, iter->dentries, iter->read_size, 0);
-	if (ret != iter->read_size) {
+	if (read_next_clus(iter, 0) != (ssize_t)iter->read_size) {
 		exfat_err("failed to read directory entries.\n");
 		return -EIO;
 	}
 
-	iter->exfat = exfat;
-	iter->parent = dir;
 	iter->de_file_offset = 0;
 	iter->next_read_offset = iter->read_size;
 	iter->max_skip_dentries = 0;
@@ -97,45 +79,33 @@ int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 }
 
 int exfat_de_iter_get(struct exfat_de_iter *iter,
-				int ith, struct exfat_dentry **dentry)
+			int ith, struct exfat_dentry **dentry)
 {
-	off_t de_next_file_offset;
-	unsigned int de_next_offset;
-	bool need_read_1_clus = false;
-	int ret;
+	off_t next_de_file_offset;
+	ssize_t ret;
+	clus_t next_l_clus;
 
-	de_next_file_offset = iter->de_file_offset +
+	next_de_file_offset = iter->de_file_offset +
 			ith * sizeof(struct exfat_dentry);
+	next_l_clus = (clus_t) (next_de_file_offset / iter->read_size);
 
-	if (de_next_file_offset + sizeof(struct exfat_dentry) >
-		round_down(iter->parent->size, sizeof(struct exfat_dentry)))
+	if (next_de_file_offset + sizeof(struct exfat_dentry) >
+		iter->parent->size)
 		return EOF;
-
 	/*
-	 * dentry must be in current cluster, or next cluster which
+	 * desired dentry must be in current, or next cluster which
 	 * will be read
 	 */
-	if (de_next_file_offset -
-		(iter->de_file_offset / iter->read_size) * iter->read_size >=
-		iter->read_size * 2)
+	if (next_l_clus > iter->de_file_offset / iter->read_size + 1)
 		return -ERANGE;
 
-	de_next_offset = de_next_file_offset % (iter->read_size * 2);
-
-	/* read a cluster if needed */
-	if (de_next_file_offset >= iter->next_read_offset) {
-		void *buf;
-
-		need_read_1_clus = de_next_offset < iter->read_size;
-		buf = need_read_1_clus ?
-			iter->dentries : iter->dentries + iter->read_size;
-
-		ret = exfat_file_read(iter->exfat, iter->parent, buf,
-			iter->read_size, iter->next_read_offset);
+	/* read next cluster if needed */
+	if (next_de_file_offset >= iter->next_read_offset) {
+		ret = read_next_clus(iter, next_l_clus);
 		if (ret == EOF) {
 			return EOF;
-		} else if (ret <= 0) {
-			exfat_err("failed to read a cluster. %d\n", ret);
+		} else if (ret != (ssize_t)iter->read_size) {
+			exfat_err("failed to read a cluster. %zd\n", ret);
 			return ret;
 		}
 		iter->next_read_offset += iter->read_size;
@@ -144,7 +114,9 @@ int exfat_de_iter_get(struct exfat_de_iter *iter,
 	if (ith + 1 > iter->max_skip_dentries)
 		iter->max_skip_dentries = ith + 1;
 
-	*dentry = (struct exfat_dentry *) (iter->dentries + de_next_offset);
+	*dentry = (struct exfat_dentry *)
+			(iter->buffer_desc[next_l_clus & 0x01].buffer +
+			next_de_file_offset % iter->read_size);
 	return 0;
 }
 

@@ -192,13 +192,19 @@ static struct exfat *alloc_exfat(struct exfat_blk_dev *bd)
 
 static void free_exfat(struct exfat *exfat)
 {
+	int i;
+
 	if (exfat) {
 		if (exfat->bs)
 			free(exfat->bs);
-		if (exfat->de_iter.dentries)
-			free(exfat->de_iter.dentries);
 		if (exfat->alloc_bitmap)
 			free(exfat->alloc_bitmap);
+		for (i = 0; i < 2; i++) {
+			if (exfat->buffer_desc[i].buffer)
+				free(exfat->buffer_desc[i].buffer);
+			if (exfat->buffer_desc[i].dirty)
+				free(exfat->buffer_desc[i].dirty);
+		}
 		free(exfat);
 	}
 }
@@ -214,7 +220,7 @@ static void exfat_free_dir_list(struct exfat *exfat)
 	}
 }
 
-bool exfat_invalid_clus(struct exfat *exfat, clus_t clus)
+static bool exfat_invalid_clus(struct exfat *exfat, clus_t clus)
 {
 	return clus < EXFAT_FIRST_CLUSTER ||
 	(clus - EXFAT_FIRST_CLUSTER) > le32_to_cpu(exfat->bs->bsx.clu_count);
@@ -1002,6 +1008,23 @@ static bool exfat_root_dir_check(struct exfat *exfat)
 {
 	struct exfat_inode *root;
 	clus_t clus_count;
+	int i;
+
+	exfat->clus_size = EXFAT_CLUSTER_SIZE(exfat->bs);
+	exfat->sect_size = EXFAT_SECTOR_SIZE(exfat->bs);
+
+	/* allocate cluster buffers */
+	for (i = 0; i < 2; i++) {
+		exfat->buffer_desc[i].buffer =
+			(char *)malloc(exfat->clus_size);
+		if (!exfat->buffer_desc[i].buffer)
+			return false;
+		exfat->buffer_desc[i].dirty =
+			(char *)calloc(
+			(exfat->clus_size / exfat->sect_size), 1);
+		if (!exfat->buffer_desc[i].dirty)
+			return false;
+	}
 
 	root = alloc_exfat_inode(ATTR_SUBDIR);
 	if (!root) {

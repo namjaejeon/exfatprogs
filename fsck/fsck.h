@@ -27,12 +27,19 @@ struct exfat_inode {
 #define EXFAT_NAME_MAX			255
 #define NAME_BUFFER_SIZE		((EXFAT_NAME_MAX+1)*2)
 
+struct buffer_desc {
+	clus_t		p_clus;
+	char		*buffer;
+	char		*dirty;
+};
+
 struct exfat_de_iter {
 	struct exfat		*exfat;
 	struct exfat_inode	*parent;
-	unsigned char		*dentries;	/* cluster * 2 allocated */
-	unsigned int		read_size;	/* cluster size */
-	off_t			de_file_offset;	/* offset in dentries buffer */
+	struct buffer_desc	*buffer_desc;		/* cluster * 2 */
+	unsigned int		read_size;		/* cluster size */
+	unsigned int		write_size;		/* sector size */
+	off_t			de_file_offset;
 	off_t			next_read_offset;
 	int			max_skip_dentries;
 };
@@ -51,7 +58,10 @@ struct exfat {
 	char			volume_label[VOLUME_LABEL_BUFFER_SIZE];
 	struct exfat_inode	*root;
 	struct list_head	dir_list;
+	unsigned int		clus_size;
+	unsigned int		sect_size;
 	struct exfat_de_iter	de_iter;
+	struct buffer_desc	buffer_desc[2];	/* cluster * 2 */
 	__u32			*alloc_bitmap;
 	__u64			bit_count;
 };
@@ -62,7 +72,6 @@ struct exfat {
 
 /* fsck.c */
 off_t exfat_c2o(struct exfat *exfat, unsigned int clus);
-bool exfat_invalid_clus(struct exfat *exfat, clus_t clus);
 int inode_get_clus_next(struct exfat *exfat, struct exfat_inode *node,
 				clus_t clus, clus_t *next);
 
