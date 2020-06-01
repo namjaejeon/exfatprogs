@@ -38,9 +38,10 @@ typedef __u32	bitmap_t;
 #define EXFAT_BITMAP_SIZE(__c_count)	\
 	(DIV_ROUND_UP(__c_count, BITS_PER) * sizeof(bitmap_t))
 #define EXFAT_BITMAP_GET(__bmap, __c)	\
-			((__bmap)[BIT_ENTRY(__c)] & BIT_MASK(__c))
+			(((bitmap_t *)(__bmap))[BIT_ENTRY(__c)] & BIT_MASK(__c))
 #define EXFAT_BITMAP_SET(__bmap, __c)	\
-			((__bmap)[BIT_ENTRY(__c)] |= BIT_MASK(__c))
+			(((bitmap_t *)(__bmap))[BIT_ENTRY(__c)] |= \
+			 BIT_MASK(__c))
 
 #define FSCK_EXIT_NO_ERRORS		0x00
 #define FSCK_EXIT_CORRECTED		0x01
