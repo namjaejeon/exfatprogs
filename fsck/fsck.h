@@ -60,4 +60,18 @@ struct exfat {
 					(pbr)->bsx.sect_per_clus_bits))
 #define EXFAT_SECTOR_SIZE(pbr) (1 << (pbr)->bsx.sect_size_bits)
 
+/* fsck.c */
+off_t exfat_c2o(struct exfat *exfat, unsigned int clus);
+bool exfat_invalid_clus(struct exfat *exfat, clus_t clus);
+int inode_get_clus_next(struct exfat *exfat, struct exfat_inode *node,
+				clus_t clus, clus_t *next);
+
+/* de_iter.c */
+int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
+				struct exfat_inode *dir);
+int exfat_de_iter_get(struct exfat_de_iter *iter,
+			int ith, struct exfat_dentry **dentry);
+int exfat_de_iter_advance(struct exfat_de_iter *iter, int skip_dentries);
+off_t exfat_de_iter_file_offset(struct exfat_de_iter *iter);
+
 #endif
