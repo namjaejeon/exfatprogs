@@ -328,10 +328,10 @@ static int resolve_path_parent(struct path_resolve_ctx *ctx,
 			##__VA_ARGS__);			\
 })
 
-static bool exfat_invalid_clus(struct exfat *exfat, clus_t clus)
+static inline bool heap_clus(struct exfat *exfat, clus_t clus)
 {
-	return clus < EXFAT_FIRST_CLUSTER ||
-	(clus - EXFAT_FIRST_CLUSTER) > le32_to_cpu(exfat->bs->bsx.clu_count);
+	return clus >= EXFAT_FIRST_CLUSTER &&
+		(clus - EXFAT_FIRST_CLUSTER) < exfat->clus_count;
 }
 
 int inode_get_clus_next(struct exfat *exfat, struct exfat_inode *node,
@@ -339,7 +339,7 @@ int inode_get_clus_next(struct exfat *exfat, struct exfat_inode *node,
 {
 	off_t offset;
 
-	if (exfat_invalid_clus(exfat, clus))
+	if (!heap_clus(exfat, clus))
 		return -EINVAL;
 
 	if (node->is_contiguous) {
@@ -367,7 +367,7 @@ static bool inode_check_clus_chain(struct exfat *exfat, struct exfat_inode *node
 	clus_count = DIV_ROUND_UP(node->size, EXFAT_CLUSTER_SIZE(exfat->bs));
 
 	while (clus_count--) {
-		if (exfat_invalid_clus(exfat, clus)) {
+		if (!heap_clus(exfat, clus)) {
 			exfat_err("bad cluster. 0x%x\n", clus);
 			return false;
 		}
@@ -399,7 +399,7 @@ static bool inode_get_clus_count(struct exfat *exfat, struct exfat_inode *node,
 	*clus_count = 0;
 
 	do {
-		if (exfat_invalid_clus(exfat, clus)) {
+		if (!heap_clus(exfat, clus)) {
 			exfat_err("bad cluster. 0x%x\n", clus);
 			return false;
 		}
@@ -562,6 +562,10 @@ static bool exfat_boot_region_check(struct exfat *exfat)
 		goto err;
 	}
 
+	exfat->clus_count = le32_to_cpu(exfat->bs->bsx.clu_count);
+	exfat->clus_size = EXFAT_CLUSTER_SIZE(exfat->bs);
+	exfat->sect_size = EXFAT_SECTOR_SIZE(exfat->bs);
+
 	return true;
 err:
 	free(bs);
@@ -618,7 +622,7 @@ static bool check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 		ret = false;
 	}
 
-	if (node->size > 0 && exfat_invalid_clus(exfat, node->first_clus)) {
+	if (node->size > 0 && !heap_clus(exfat, node->first_clus)) {
 		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
 		exfat_err("first cluster %#x is invalid: %s\n",
 				node->first_clus, path_resolve_ctx.local_path);
@@ -804,8 +808,8 @@ static void exfat_bitmap_set_range(struct exfat *exfat,
 {
 	clus_t clus;
 
-	if (exfat_invalid_clus(exfat, start_clus) ||
-		exfat_invalid_clus(exfat, start_clus + count))
+	if (!heap_clus(exfat, start_clus) ||
+		!heap_clus(exfat, start_clus + count))
 		return;
 
 	clus = start_clus;
@@ -835,7 +839,7 @@ static bool read_bitmap(struct exfat_de_iter *iter)
 				le64_to_cpu(dentry->bitmap_size));
 		return false;
 	}
-	if (exfat_invalid_clus(exfat, le32_to_cpu(dentry->bitmap_start_clu))) {
+	if (!heap_clus(exfat, le32_to_cpu(dentry->bitmap_start_clu))) {
 		exfat_err("invalid start cluster of allocate bitmap. 0x%x\n",
 				le32_to_cpu(dentry->bitmap_start_clu));
 		return false;
@@ -874,7 +878,7 @@ static bool read_upcase_table(struct exfat_de_iter *iter)
 	if (exfat_de_iter_get(iter, 0, &dentry))
 		return false;
 
-	if (exfat_invalid_clus(exfat, le32_to_cpu(dentry->upcase_start_clu))) {
+	if (!heap_clus(exfat, le32_to_cpu(dentry->upcase_start_clu))) {
 		exfat_err("invalid start cluster of upcase table. 0x%x\n",
 			le32_to_cpu(dentry->upcase_start_clu));
 		return false;
@@ -1062,16 +1066,12 @@ static bool exfat_root_dir_check(struct exfat *exfat)
 	int i;
 
 	/* TODO: bitmap could be very large. */
-	exfat->clus_count = le32_to_cpu(exfat->bs->bsx.clu_count);
 	exfat->alloc_bitmap = (char *)calloc(1,
 			EXFAT_BITMAP_SIZE(exfat->clus_count));
 	if (!exfat->alloc_bitmap) {
 		exfat_err("failed to allocate bitmap\n");
 		return false;
 	}
-
-	exfat->clus_size = EXFAT_CLUSTER_SIZE(exfat->bs);
-	exfat->sect_size = EXFAT_SECTOR_SIZE(exfat->bs);
 
 	/* allocate cluster buffers */
 	for (i = 0; i < 2; i++) {
