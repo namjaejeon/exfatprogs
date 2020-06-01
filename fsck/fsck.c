@@ -201,6 +201,8 @@ static void free_exfat(struct exfat *exfat)
 			free(exfat->bs);
 		if (exfat->alloc_bitmap)
 			free(exfat->alloc_bitmap);
+		if (exfat->disk_bitmap)
+			free(exfat->disk_bitmap);
 		for (i = 0; i < 2; i++) {
 			if (exfat->buffer_desc[i].buffer)
 				free(exfat->buffer_desc[i].buffer);
@@ -804,11 +806,27 @@ static bool read_volume_label(struct exfat_de_iter *iter)
 	return true;
 }
 
-static bool read_alloc_bitmap(struct exfat_de_iter *iter)
+static void exfat_bitmap_set_range(struct exfat *exfat,
+			clus_t start_clus, clus_t count)
+{
+	clus_t clus;
+
+	if (exfat_invalid_clus(exfat, start_clus) ||
+		exfat_invalid_clus(exfat, start_clus + count))
+		return;
+
+	clus = start_clus;
+	while (clus < start_clus + count) {
+		EXFAT_BITMAP_SET(exfat->alloc_bitmap,
+				clus - EXFAT_FIRST_CLUSTER);
+		clus++;
+	}
+}
+
+static bool read_bitmap(struct exfat_de_iter *iter)
 {
 	struct exfat_dentry *dentry;
 	struct exfat *exfat;
-	ssize_t alloc_bitmap_size;
 
 	exfat = iter->exfat;
 	if (exfat_de_iter_get(iter, 0, &dentry))
@@ -818,10 +836,8 @@ static bool read_alloc_bitmap(struct exfat_de_iter *iter)
 			le32_to_cpu(dentry->bitmap_start_clu),
 			le64_to_cpu(dentry->bitmap_size));
 
-	exfat->bit_count = le32_to_cpu(exfat->bs->bsx.clu_count);
-
 	if (le64_to_cpu(dentry->bitmap_size) <
-			DIV_ROUND_UP(exfat->bit_count, 8)) {
+			DIV_ROUND_UP(exfat->clus_count, 8)) {
 		exfat_err("invalid size of allocation bitmap. 0x%" PRIx64 "\n",
 				le64_to_cpu(dentry->bitmap_size));
 		return false;
@@ -832,24 +848,22 @@ static bool read_alloc_bitmap(struct exfat_de_iter *iter)
 		return false;
 	}
 
-	/* TODO: bitmap could be very large. */
-	alloc_bitmap_size = EXFAT_BITMAP_SIZE(exfat->bit_count);
-	exfat->alloc_bitmap = (__u32 *)malloc(alloc_bitmap_size);
-	if (!exfat->alloc_bitmap) {
-		exfat_err("failed to allocate bitmap\n");
-		return false;
-	}
+	exfat->disk_bitmap_clus = le32_to_cpu(dentry->bitmap_start_clu);
+	exfat->disk_bitmap_size = DIV_ROUND_UP(exfat->clus_count, 8);
 
-	if (exfat_read(exfat->blk_dev->dev_fd,
-			exfat->alloc_bitmap, alloc_bitmap_size,
-			exfat_c2o(exfat,
-			le32_to_cpu(dentry->bitmap_start_clu))) !=
-			alloc_bitmap_size) {
-		exfat_err("failed to read bitmap\n");
-		free(exfat->alloc_bitmap);
-		exfat->alloc_bitmap = NULL;
+	exfat_bitmap_set_range(exfat, le64_to_cpu(dentry->bitmap_start_clu),
+			DIV_ROUND_UP(exfat->disk_bitmap_size,
+			EXFAT_CLUSTER_SIZE(exfat->bs)));
+
+	exfat->disk_bitmap = (char *)malloc(
+				EXFAT_BITMAP_SIZE(exfat->clus_count));
+	if (!exfat->disk_bitmap)
 		return false;
-	}
+	if (exfat_read(exfat->blk_dev->dev_fd, exfat->disk_bitmap,
+			exfat->disk_bitmap_size,
+			exfat_c2o(exfat, exfat->disk_bitmap_clus)) !=
+			(ssize_t)exfat->disk_bitmap_size)
+		return false;
 
 	return true;
 }
@@ -903,6 +917,10 @@ static bool read_upcase_table(struct exfat_de_iter *iter)
 		free(upcase);
 		return false;
 	}
+
+	exfat_bitmap_set_range(exfat, le32_to_cpu(dentry->upcase_start_clu),
+			DIV_ROUND_UP(le64_to_cpu(dentry->upcase_size),
+			EXFAT_CLUSTER_SIZE(exfat->bs)));
 
 	free(upcase);
 	return true;
@@ -960,7 +978,7 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 			}
 			break;
 		case EXFAT_BITMAP:
-			if (!read_alloc_bitmap(de_iter)) {
+			if (!read_bitmap(de_iter)) {
 				exfat_err(
 					"failed to verify allocation bitmap\n");
 				ret = -EINVAL;
@@ -1049,6 +1067,15 @@ static bool exfat_root_dir_check(struct exfat *exfat)
 	struct exfat_inode *root;
 	clus_t clus_count;
 	int i;
+
+	/* TODO: bitmap could be very large. */
+	exfat->clus_count = le32_to_cpu(exfat->bs->bsx.clu_count);
+	exfat->alloc_bitmap = (char *)calloc(1,
+			EXFAT_BITMAP_SIZE(exfat->clus_count));
+	if (!exfat->alloc_bitmap) {
+		exfat_err("failed to allocate bitmap\n");
+		return false;
+	}
 
 	exfat->clus_size = EXFAT_CLUSTER_SIZE(exfat->bs);
 	exfat->sect_size = EXFAT_SECTOR_SIZE(exfat->bs);

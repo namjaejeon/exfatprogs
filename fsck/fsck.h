@@ -61,12 +61,15 @@ struct exfat {
 	char			volume_label[VOLUME_LABEL_BUFFER_SIZE];
 	struct exfat_inode	*root;
 	struct list_head	dir_list;
+	clus_t			clus_count;
 	unsigned int		clus_size;
 	unsigned int		sect_size;
 	struct exfat_de_iter	de_iter;
 	struct buffer_desc	buffer_desc[2];	/* cluster * 2 */
-	__u32			*alloc_bitmap;
-	__u64			bit_count;
+	char			*alloc_bitmap;
+	char			*disk_bitmap;
+	clus_t			disk_bitmap_clus;
+	unsigned int		disk_bitmap_size;
 };
 
 #define EXFAT_CLUSTER_SIZE(pbr) (1 << ((pbr)->bsx.sect_size_bits +	\
