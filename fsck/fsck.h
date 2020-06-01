@@ -80,6 +80,9 @@ int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 				struct exfat_inode *dir);
 int exfat_de_iter_get(struct exfat_de_iter *iter,
 			int ith, struct exfat_dentry **dentry);
+int exfat_de_iter_get_dirty(struct exfat_de_iter *iter,
+			int ith, struct exfat_dentry **dentry);
+int exfat_de_iter_flush(struct exfat_de_iter *iter);
 int exfat_de_iter_advance(struct exfat_de_iter *iter, int skip_dentries);
 off_t exfat_de_iter_file_offset(struct exfat_de_iter *iter);
 

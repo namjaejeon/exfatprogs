@@ -949,10 +949,12 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 		exfat_de_iter_advance(de_iter, dentry_count);
 	}
 	list_splice(&sub_dir_list, &exfat->dir_list);
+	exfat_de_iter_flush(de_iter);
 	return 0;
 err:
 	inode_free_children(dir, false);
 	INIT_LIST_HEAD(&dir->children);
+	exfat_de_iter_flush(de_iter);
 	return ret;
 }
 

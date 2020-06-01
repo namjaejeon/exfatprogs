@@ -120,6 +120,33 @@ int exfat_de_iter_get(struct exfat_de_iter *iter,
 	return 0;
 }
 
+int exfat_de_iter_get_dirty(struct exfat_de_iter *iter,
+			int ith, struct exfat_dentry **dentry)
+{
+	off_t next_file_offset;
+	clus_t l_clus;
+	int ret, sect_idx;
+
+	ret = exfat_de_iter_get(iter, ith, dentry);
+	if (!ret) {
+		next_file_offset = iter->de_file_offset +
+				ith * sizeof(struct exfat_dentry);
+		l_clus = (clus_t)(next_file_offset / iter->read_size);
+		sect_idx = (int)(next_file_offset / iter->write_size);
+		iter->buffer_desc[l_clus & 0x01].dirty[sect_idx] = 1;
+	}
+
+	return ret;
+}
+
+int exfat_de_iter_flush(struct exfat_de_iter *iter)
+{
+	if (write_clus(iter, 0) ||
+		write_clus(iter, 1))
+		return -EIO;
+	return 0;
+}
+
 /*
  * @skip_dentries must be the largest @ith + 1 of exfat_de_iter_get
  * since the last call of exfat_de_iter_advance
