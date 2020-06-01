@@ -279,7 +279,7 @@ ssize_t exfat_utf16_dec(const __u16 *in_str, size_t in_len,
 	memset(&ps, 0, sizeof(ps));
 
 	/* And then convert wchar_t* string to multibyte char* string */
-	for (i = 0, out_len = 0, c_len = 0; i < wcs_len; i++) {
+	for (i = 0, out_len = 0, c_len = 0; i <= wcs_len; i++) {
 		c_len = wcrtomb(c_str, wcs[i], &ps);
 		/*
 		 * If character is non-representable in current locale then
@@ -308,7 +308,7 @@ ssize_t exfat_utf16_dec(const __u16 *in_str, size_t in_len,
 	free(wcs);
 
 	/* Last iteration of above loop should have produced null byte */
-	if (c_len == 0 || out_str[out_len] != 0) {
+	if (c_len == 0 || out_str[out_len-1] != 0) {
 		exfat_err("invalid UTF-16 sequence\n");
 		return -errno;
 	}
