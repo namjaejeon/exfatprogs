@@ -418,7 +418,14 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 		 */
 		if (EXFAT_BITMAP_GET(exfat->alloc_bitmap,
 				clus - EXFAT_FIRST_CLUSTER)) {
-			return -EINVAL;
+			if (repair_file_ask(&exfat->de_iter, node,
+					ER_FILE_DUPLICATED_CLUS,
+					"cluster is already allocated for "
+					"the other file. truncated to %u bytes",
+					count * EXFAT_CLUSTER_SIZE(exfat->bs)))
+				goto truncate_file;
+			else
+				return -EINVAL;
 		}
 
 		/* This cluster is allocated or not */
