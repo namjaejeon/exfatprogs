@@ -78,7 +78,7 @@ struct exfat {
 
 /* fsck.c */
 off_t exfat_c2o(struct exfat *exfat, unsigned int clus);
-int inode_get_clus_next(struct exfat *exfat, struct exfat_inode *node,
+int get_next_clus(struct exfat *exfat, struct exfat_inode *node,
 				clus_t clus, clus_t *next);
 
 /* de_iter.c */

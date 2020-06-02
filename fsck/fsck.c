@@ -334,10 +334,12 @@ static inline bool heap_clus(struct exfat *exfat, clus_t clus)
 		(clus - EXFAT_FIRST_CLUSTER) < exfat->clus_count;
 }
 
-int inode_get_clus_next(struct exfat *exfat, struct exfat_inode *node,
+int get_next_clus(struct exfat *exfat, struct exfat_inode *node,
 				clus_t clus, clus_t *next)
 {
 	off_t offset;
+
+	*next = EXFAT_EOF_CLUSTER;
 
 	if (!heap_clus(exfat, clus))
 		return -EINVAL;
@@ -358,7 +360,7 @@ int inode_get_clus_next(struct exfat *exfat, struct exfat_inode *node,
 	return 0;
 }
 
-static bool inode_check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
+static bool check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 {
 	clus_t clus;
 	clus_t clus_count;
@@ -380,7 +382,7 @@ static bool inode_check_clus_chain(struct exfat *exfat, struct exfat_inode *node
 			return false;
 		}
 
-		if (inode_get_clus_next(exfat, node, clus, &clus) != 0) {
+		if (get_next_clus(exfat, node, clus, &clus) != 0) {
 			exfat_err(
 				"broken cluster chain. (previous cluster 0x%x)\n",
 				clus);
@@ -390,7 +392,7 @@ static bool inode_check_clus_chain(struct exfat *exfat, struct exfat_inode *node
 	return true;
 }
 
-static bool inode_get_clus_count(struct exfat *exfat, struct exfat_inode *node,
+static bool root_get_clus_count(struct exfat *exfat, struct exfat_inode *node,
 							clus_t *clus_count)
 {
 	clus_t clus;
@@ -400,14 +402,23 @@ static bool inode_get_clus_count(struct exfat *exfat, struct exfat_inode *node,
 
 	do {
 		if (!heap_clus(exfat, clus)) {
-			exfat_err("bad cluster. 0x%x\n", clus);
+			exfat_err("/: bad cluster. 0x%x\n", clus);
 			return false;
 		}
 
-		if (inode_get_clus_next(exfat, node, clus, &clus) != 0) {
-			exfat_err(
-				"broken cluster chain. (previous cluster 0x%x)\n",
-				clus);
+		if (EXFAT_BITMAP_GET(exfat->alloc_bitmap,
+				clus - EXFAT_FIRST_CLUSTER)) {
+			resolve_path(&path_resolve_ctx, node);
+			exfat_err("/: cluster is already allocated, or "
+				"there is a loop in cluster chain\n");
+			return false;
+		}
+
+		EXFAT_BITMAP_SET(exfat->alloc_bitmap,
+				clus - EXFAT_FIRST_CLUSTER);
+
+		if (get_next_clus(exfat, node, clus, &clus) != 0) {
+			exfat_err("/: broken cluster chain\n");
 			return false;
 		}
 
@@ -653,7 +664,7 @@ static bool check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 		ret = false;
 	}
 
-	if (!node->is_contiguous && !inode_check_clus_chain(exfat, node)) {
+	if (!node->is_contiguous && !check_clus_chain(exfat, node)) {
 		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
 		exfat_err("corrupted cluster chain: %s\n",
 				path_resolve_ctx.local_path);
@@ -1093,7 +1104,7 @@ static bool exfat_root_dir_check(struct exfat *exfat)
 	}
 
 	root->first_clus = le32_to_cpu(exfat->bs->bsx.root_cluster);
-	if (!inode_get_clus_count(exfat, root, &clus_count)) {
+	if (!root_get_clus_count(exfat, root, &clus_count)) {
 		exfat_err("failed to follow the cluster chain of root\n");
 		goto err;
 	}

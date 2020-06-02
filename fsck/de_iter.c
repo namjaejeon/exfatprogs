@@ -45,7 +45,7 @@ static ssize_t read_next_clus(struct exfat_de_iter *iter, clus_t l_clus)
 		return -EIO;
 
 	if (l_clus > 0) {
-		ret = inode_get_clus_next(exfat, iter->parent,
+		ret = get_next_clus(exfat, iter->parent,
 				iter->buffer_desc[(l_clus - 1) & 0x01].p_clus,
 				&desc->p_clus);
 		if (ret)
