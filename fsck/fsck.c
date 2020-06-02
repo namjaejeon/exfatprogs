@@ -1100,6 +1100,127 @@ err:
 	return ret;
 }
 
+static int write_dirty_fat(struct exfat *exfat)
+{
+	struct buffer_desc *bd;
+	off_t offset;
+	ssize_t len;
+	size_t read_size, write_size;
+	clus_t clus, last_clus, clus_count, i;
+	unsigned int idx;
+
+	clus = 0;
+	last_clus = le32_to_cpu(exfat->bs->bsx.clu_count) + 2;
+	bd = exfat->buffer_desc;
+	idx = 0;
+	offset = le32_to_cpu(exfat->bs->bsx.fat_offset) *
+		exfat->sect_size;
+	read_size = exfat->clus_size;
+	write_size = exfat->sect_size;
+
+	while (clus < last_clus) {
+		clus_count = MIN(read_size / sizeof(clus_t), last_clus - clus);
+		len = exfat_read(exfat->blk_dev->dev_fd, bd[idx].buffer,
+				clus_count * sizeof(clus_t), offset);
+		if (len != (ssize_t)(sizeof(clus_t) * clus_count)) {
+			exfat_err("failed to read fat entries, %zd\n", len);
+			return -EIO;
+		}
+
+		/* TODO: read ahead */
+
+		for (i = clus ? clus : EXFAT_FIRST_CLUSTER;
+				i < clus + clus_count; i++) {
+			if (!EXFAT_BITMAP_GET(exfat->alloc_bitmap,
+					i - EXFAT_FIRST_CLUSTER) &&
+					((clus_t *)bd[idx].buffer)[i - clus] !=
+					EXFAT_FREE_CLUSTER) {
+				((clus_t *)bd[idx].buffer)[i - clus] =
+					EXFAT_FREE_CLUSTER;
+				bd[idx].dirty[(i - clus) /
+					(write_size / sizeof(clus_t))] = true;
+			}
+		}
+
+		for (i = 0; i < read_size; i += write_size) {
+			if (bd[idx].dirty[i / write_size]) {
+				if (exfat_write(exfat->blk_dev->dev_fd,
+						&bd[idx].buffer[i], write_size,
+						offset + i) !=
+						(ssize_t)write_size) {
+					exfat_err("failed to write "
+						"fat entries\n");
+					return -EIO;
+
+				}
+				bd[idx].dirty[i / write_size] = false;
+			}
+		}
+
+		idx ^= 0x01;
+		clus = clus + clus_count;
+		offset += len;
+	}
+	return 0;
+}
+
+static int write_dirty_bitmap(struct exfat *exfat)
+{
+	struct buffer_desc *bd;
+	off_t offset, last_offset, bitmap_offset;
+	ssize_t len;
+	ssize_t read_size, write_size, i, size;
+	int idx;
+
+	offset = exfat_c2o(exfat, exfat->disk_bitmap_clus);
+	last_offset = offset + exfat->disk_bitmap_size;
+	bitmap_offset = 0;
+	read_size = exfat->clus_size;
+	write_size = exfat->sect_size;
+
+	bd = exfat->buffer_desc;
+	idx = 0;
+
+	while (offset < last_offset) {
+		len = MIN(read_size, last_offset - offset);
+		if (exfat_read(exfat->blk_dev->dev_fd, bd[idx].buffer,
+				len, offset) != (ssize_t)len)
+			return -EIO;
+
+		/* TODO: read-ahead */
+
+		for (i = 0; i < len; i += write_size) {
+			size = MIN(write_size, len - i);
+			if (memcmp(&bd[idx].buffer[i],
+					exfat->alloc_bitmap + bitmap_offset + i,
+					size)) {
+				if (exfat_write(exfat->blk_dev->dev_fd,
+					exfat->alloc_bitmap + bitmap_offset + i,
+					size, offset + i) != size)
+					return -EIO;
+			}
+		}
+
+		idx ^= 0x01;
+		offset += len;
+		bitmap_offset += len;
+	}
+	return 0;
+}
+
+static int reclaim_free_clusters(struct exfat *exfat)
+{
+	if (write_dirty_fat(exfat)) {
+		exfat_err("failed to write fat entries\n");
+		return -EIO;
+	}
+	if (write_dirty_bitmap(exfat)) {
+		exfat_err("failed to write bitmap\n");
+		return -EIO;
+	}
+	return 0;
+}
+
 /*
  * for each directory in @dir_list.
  * 1. read all dentries and allocate exfat_nodes for files and directories.
@@ -1145,6 +1266,9 @@ static bool exfat_filesystem_check(struct exfat *exfat)
 out:
 	exfat_free_dir_list(exfat);
 	exfat->root = NULL;
+	if (exfat->dirty_fat)
+		if (reclaim_free_clusters(exfat))
+			return false;
 	return ret;
 }
 
