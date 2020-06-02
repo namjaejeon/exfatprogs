@@ -468,6 +468,16 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 		clus = next;
 	}
 
+	if (count < max_count) {
+		if (repair_file_ask(&exfat->de_iter, node,
+			ER_FILE_LARGER_SIZE, "less clusters are allocated. "
+			"truncates to %u bytes",
+			count * EXFAT_CLUSTER_SIZE(exfat->bs)))
+			goto truncate_file;
+		else
+			return -EINVAL;
+	}
+
 	return 0;
 truncate_file:
 	node->size = count * EXFAT_CLUSTER_SIZE(exfat->bs);
