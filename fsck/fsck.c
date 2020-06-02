@@ -402,7 +402,14 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 		if (count >= max_count) {
 			if (node->is_contiguous)
 				break;
-			return -EINVAL;
+			if (repair_file_ask(&exfat->de_iter, node,
+					ER_FILE_SMALLER_SIZE,
+					"more clusters are allocated. "
+					"truncate to %u bytes",
+					count * EXFAT_CLUSTER_SIZE(exfat->bs)))
+				goto truncate_file;
+			else
+				return -EINVAL;
 		}
 
 		/*
