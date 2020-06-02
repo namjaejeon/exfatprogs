@@ -20,6 +20,7 @@ struct exfat_repair_problem {
 /* Problem flags */
 #define ERF_PREEN_YES		0x00000001
 #define ERF_DEFAULT_YES		0x00000002
+#define ERF_DEFAULT_NO		0x00000004
 
 /* Prompt types */
 #define ERP_FIX			0x00000001
@@ -35,6 +36,7 @@ static struct exfat_repair_problem problems[] = {
 	{ER_BS_CHECKSUM, ERF_DEFAULT_YES | ERF_PREEN_YES, ERP_FIX},
 	{ER_DE_CHECKSUM, ERF_DEFAULT_YES | ERF_PREEN_YES, ERP_FIX},
 	{ER_FILE_VALID_SIZE, ERF_DEFAULT_YES | ERF_PREEN_YES, ERP_FIX},
+	{ER_FILE_INVALID_CLUS, ERF_DEFAULT_NO, ERP_TRUNCATE},
 };
 
 static struct exfat_repair_problem *find_problem(er_problem_code_t prcode)
@@ -54,7 +56,8 @@ static bool ask_repair(struct exfat *exfat, struct exfat_repair_problem *pr)
 	bool repair = false;
 	char answer[8];
 
-	if (exfat->options & FSCK_OPTS_REPAIR_NO)
+	if (exfat->options & FSCK_OPTS_REPAIR_NO ||
+			pr->flags & ERF_DEFAULT_NO)
 		repair = false;
 	else if (exfat->options & FSCK_OPTS_REPAIR_YES ||
 			pr->flags & ERF_DEFAULT_YES)

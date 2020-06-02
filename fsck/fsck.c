@@ -360,36 +360,118 @@ int get_next_clus(struct exfat *exfat, struct exfat_inode *node,
 	return 0;
 }
 
-static bool check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
+static int set_fat(struct exfat *exfat, clus_t clus, clus_t next_clus)
 {
-	clus_t clus;
-	clus_t clus_count;
+	off_t offset;
+
+	offset = le32_to_cpu(exfat->bs->bsx.fat_offset) <<
+		exfat->bs->bsx.sect_size_bits;
+	offset += sizeof(clus_t) * clus;
+
+	if (exfat_write(exfat->blk_dev->dev_fd, &next_clus, sizeof(next_clus),
+			offset) != sizeof(next_clus))
+		return -EIO;
+	return 0;
+}
+
+static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
+{
+	struct exfat_dentry *stream_de;
+	clus_t clus, prev, next;
+	clus_t count, max_count;
 
 	clus = node->first_clus;
-	clus_count = DIV_ROUND_UP(node->size, EXFAT_CLUSTER_SIZE(exfat->bs));
+	prev = EXFAT_EOF_CLUSTER;
+	count = 0;
+	max_count = DIV_ROUND_UP(node->size, exfat->clus_size);
 
-	while (clus_count--) {
-		if (!heap_clus(exfat, clus)) {
-			exfat_err("bad cluster. 0x%x\n", clus);
-			return false;
-		}
+	if (node->size == 0 && node->first_clus == EXFAT_FREE_CLUSTER)
+		return 0;
 
-		if (!EXFAT_BITMAP_GET(exfat->alloc_bitmap,
-					clus - EXFAT_FIRST_CLUSTER)) {
-			exfat_err(
-				"cluster allocated, but not in bitmap. 0x%x\n",
-				clus);
-			return false;
-		}
-
-		if (get_next_clus(exfat, node, clus, &clus) != 0) {
-			exfat_err(
-				"broken cluster chain. (previous cluster 0x%x)\n",
-				clus);
-			return false;
-		}
+	/* the first cluster is wrong */
+	if ((node->size == 0 && node->first_clus != EXFAT_FREE_CLUSTER) ||
+		(node->size > 0 && !heap_clus(exfat, node->first_clus))) {
+		return -EINVAL;
 	}
-	return true;
+
+	while (clus != EXFAT_EOF_CLUSTER) {
+		if (count >= max_count) {
+			if (node->is_contiguous)
+				break;
+			return -EINVAL;
+		}
+
+		/*
+		 * This cluster is already allocated. it may be shared with
+		 * the other file, or there is a loop in cluster chain.
+		 */
+		if (EXFAT_BITMAP_GET(exfat->alloc_bitmap,
+				clus - EXFAT_FIRST_CLUSTER)) {
+			return -EINVAL;
+		}
+
+		/* This cluster is allocated or not */
+		if (get_next_clus(exfat, node, clus, &next))
+			goto truncate_file;
+		if (!node->is_contiguous) {
+			if (!heap_clus(exfat, next) &&
+					next != EXFAT_EOF_CLUSTER) {
+				if (repair_file_ask(&exfat->de_iter, node,
+						ER_FILE_INVALID_CLUS,
+						"broken cluster chain. "
+						"truncate to %u bytes",
+						count *
+						EXFAT_CLUSTER_SIZE(exfat->bs)))
+					goto truncate_file;
+
+				else
+					return -EINVAL;
+			}
+		} else {
+			if (!EXFAT_BITMAP_GET(exfat->disk_bitmap,
+					clus - EXFAT_FIRST_CLUSTER)) {
+				if (repair_file_ask(&exfat->de_iter, node,
+						ER_FILE_INVALID_CLUS,
+						"cluster is marked as free. "
+						"truncate to %u bytes",
+						count *
+						EXFAT_CLUSTER_SIZE(exfat->bs)))
+					goto truncate_file;
+
+				else
+					return -EINVAL;
+			}
+		}
+
+		count++;
+		EXFAT_BITMAP_SET(exfat->alloc_bitmap,
+				clus - EXFAT_FIRST_CLUSTER);
+		prev = clus;
+		clus = next;
+	}
+
+	return 0;
+truncate_file:
+	node->size = count * EXFAT_CLUSTER_SIZE(exfat->bs);
+	if (!heap_clus(exfat, prev))
+		node->first_clus = EXFAT_FREE_CLUSTER;
+
+	exfat_de_iter_get_dirty(&exfat->de_iter, 1, &stream_de);
+	if (count * EXFAT_CLUSTER_SIZE(exfat->bs) <
+			le64_to_cpu(stream_de->stream_valid_size))
+		stream_de->stream_valid_size = cpu_to_le64(
+				count * EXFAT_CLUSTER_SIZE(exfat->bs));
+	if (!heap_clus(exfat, prev))
+		stream_de->stream_start_clu = EXFAT_FREE_CLUSTER;
+	stream_de->stream_size = cpu_to_le64(
+			count * EXFAT_CLUSTER_SIZE(exfat->bs));
+
+	/* remaining clusters will be freed while FAT is compared with
+	 * alloc_bitmap.
+	 */
+	if (!node->is_contiguous && heap_clus(exfat, prev))
+		return set_fat(exfat, prev, EXFAT_EOF_CLUSTER);
+	return 0;
 }
 
 static bool root_get_clus_count(struct exfat *exfat, struct exfat_inode *node,
@@ -640,6 +722,9 @@ static bool check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 		ret = false;
 	}
 
+	if (check_clus_chain(exfat, node))
+		return false;
+
 	if (node->size > le32_to_cpu(exfat->bs->bsx.clu_count) *
 				EXFAT_CLUSTER_SIZE(exfat->bs)) {
 		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
@@ -660,13 +745,6 @@ static bool check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
 		exfat_err("directory size %" PRIu64 " is not divisible by %d: %s\n",
 				node->size, EXFAT_CLUSTER_SIZE(exfat->bs),
-				path_resolve_ctx.local_path);
-		ret = false;
-	}
-
-	if (!node->is_contiguous && !check_clus_chain(exfat, node)) {
-		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
-		exfat_err("corrupted cluster chain: %s\n",
 				path_resolve_ctx.local_path);
 		ret = false;
 	}
