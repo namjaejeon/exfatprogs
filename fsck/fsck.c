@@ -869,7 +869,7 @@ static int read_file(struct exfat_de_iter *de_iter,
 	if (!ret) {
 		exfat_err("corrupted file directory entries.\n");
 		free_exfat_inode(node);
-		return ret;
+		return -EINVAL;
 	}
 
 	node->dentry_file_offset = exfat_de_iter_file_offset(de_iter);
