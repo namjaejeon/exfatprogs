@@ -391,7 +391,11 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 	/* the first cluster is wrong */
 	if ((node->size == 0 && node->first_clus != EXFAT_FREE_CLUSTER) ||
 		(node->size > 0 && !heap_clus(exfat, node->first_clus))) {
-		return -EINVAL;
+		if (repair_file_ask(&exfat->de_iter, node,
+			ER_FILE_FIRST_CLUS, "first cluster is wrong"))
+			goto truncate_file;
+		else
+			return -EINVAL;
 	}
 
 	while (clus != EXFAT_EOF_CLUSTER) {
@@ -707,20 +711,6 @@ static bool check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 	struct exfat_dentry *dentry;
 	bool ret = true;
 	uint16_t checksum;
-
-	if (node->size == 0 && node->first_clus != EXFAT_FREE_CLUSTER) {
-		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
-		exfat_err("file is empty, but first cluster is %#x: %s\n",
-				node->first_clus, path_resolve_ctx.local_path);
-		ret = false;
-	}
-
-	if (node->size > 0 && !heap_clus(exfat, node->first_clus)) {
-		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
-		exfat_err("first cluster %#x is invalid: %s\n",
-				node->first_clus, path_resolve_ctx.local_path);
-		ret = false;
-	}
 
 	if (check_clus_chain(exfat, node))
 		return false;

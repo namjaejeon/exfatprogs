@@ -37,6 +37,7 @@ static struct exfat_repair_problem problems[] = {
 	{ER_DE_CHECKSUM, ERF_DEFAULT_YES | ERF_PREEN_YES, ERP_FIX},
 	{ER_FILE_VALID_SIZE, ERF_DEFAULT_YES | ERF_PREEN_YES, ERP_FIX},
 	{ER_FILE_INVALID_CLUS, ERF_DEFAULT_NO, ERP_TRUNCATE},
+	{ER_FILE_FIRST_CLUS, ERF_DEFAULT_NO, ERP_TRUNCATE},
 };
 
 static struct exfat_repair_problem *find_problem(er_problem_code_t prcode)

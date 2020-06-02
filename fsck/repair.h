@@ -9,6 +9,7 @@
 #define ER_DE_CHECKSUM			0x00001001
 #define ER_FILE_VALID_SIZE		0x00002001
 #define ER_FILE_INVALID_CLUS		0x00002002
+#define ER_FILE_FIRST_CLUS		0x00002003
 
 typedef unsigned int er_problem_code_t;
 
