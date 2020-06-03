@@ -1320,7 +1320,7 @@ out:
 	return ret;
 }
 
-static bool exfat_root_dir_check(struct exfat *exfat)
+static int exfat_root_dir_check(struct exfat *exfat)
 {
 	struct exfat_inode *root;
 	clus_t clus_count;
@@ -1331,7 +1331,7 @@ static bool exfat_root_dir_check(struct exfat *exfat)
 			EXFAT_BITMAP_SIZE(exfat->clus_count));
 	if (!exfat->alloc_bitmap) {
 		exfat_err("failed to allocate bitmap\n");
-		return false;
+		return -ENOMEM;
 	}
 
 	/* allocate cluster buffers */
@@ -1339,35 +1339,32 @@ static bool exfat_root_dir_check(struct exfat *exfat)
 		exfat->buffer_desc[i].buffer =
 			(char *)malloc(exfat->clus_size);
 		if (!exfat->buffer_desc[i].buffer)
-			return false;
+			return -ENOMEM;
 		exfat->buffer_desc[i].dirty =
 			(char *)calloc(
 			(exfat->clus_size / exfat->sect_size), 1);
 		if (!exfat->buffer_desc[i].dirty)
-			return false;
+			return -ENOMEM;
 	}
 
 	root = alloc_exfat_inode(ATTR_SUBDIR);
 	if (!root) {
 		exfat_err("failed to allocate memory\n");
-		return false;
+		return -ENOMEM;
 	}
 
 	root->first_clus = le32_to_cpu(exfat->bs->bsx.root_cluster);
 	if (!root_get_clus_count(exfat, root, &clus_count)) {
 		exfat_err("failed to follow the cluster chain of root\n");
-		goto err;
+		free_exfat_inode(root);
+		return -EINVAL;
 	}
 	root->size = clus_count * EXFAT_CLUSTER_SIZE(exfat->bs);
 
 	exfat->root = root;
 	exfat_debug("root directory: start cluster[0x%x] size[0x%" PRIx64 "]\n",
 		root->first_clus, root->size);
-	return true;
-err:
-	free_exfat_inode(root);
-	exfat->root = NULL;
-	return false;
+	return 0;
 }
 
 void exfat_show_info(struct exfat *exfat)
@@ -1481,9 +1478,9 @@ int main(int argc, char * const argv[])
 	exfat_show_info(exfat);
 
 	exfat_debug("verifying root directory...\n");
-	if (!exfat_root_dir_check(exfat)) {
+	ret = exfat_root_dir_check(exfat);
+	if (ret) {
 		exfat_err("failed to verify root directory.\n");
-		ret = -EINVAL;
 		goto out;
 	}
 
