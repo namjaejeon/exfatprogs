@@ -641,7 +641,7 @@ static int exfat_mark_volume_dirty(struct exfat *exfat, bool dirty)
 	return 0;
 }
 
-static bool exfat_boot_region_check(struct exfat *exfat)
+static int exfat_boot_region_check(struct exfat *exfat)
 {
 	struct pbr *bs;
 	ssize_t ret;
@@ -649,7 +649,7 @@ static bool exfat_boot_region_check(struct exfat *exfat)
 	bs = (struct pbr *)malloc(sizeof(struct pbr));
 	if (!bs) {
 		exfat_err("failed to allocate memory\n");
-		return false;
+		return -ENOMEM;
 	}
 
 	exfat->bs = bs;
@@ -657,9 +657,11 @@ static bool exfat_boot_region_check(struct exfat *exfat)
 	ret = exfat_read(exfat->blk_dev->dev_fd, bs, sizeof(*bs), 0);
 	if (ret != sizeof(*bs)) {
 		exfat_err("failed to read a boot sector. %zd\n", ret);
+		ret = -EIO;
 		goto err;
 	}
 
+	ret = -EINVAL;
 	if (memcmp(bs->bpb.oem_name, "EXFAT   ", 8) != 0) {
 		exfat_err("failed to find exfat file system.\n");
 		goto err;
@@ -705,6 +707,7 @@ static bool exfat_boot_region_check(struct exfat *exfat)
 
 	if (exfat_mark_volume_dirty(exfat, true)) {
 		exfat_err("failed to set VolumeDirty\n");
+		ret = -EIO;
 		goto err;
 	}
 
@@ -718,11 +721,11 @@ static bool exfat_boot_region_check(struct exfat *exfat)
 	exfat->clus_count = le32_to_cpu(exfat->bs->bsx.clu_count);
 	exfat->clus_size = EXFAT_CLUSTER_SIZE(exfat->bs);
 	exfat->sect_size = EXFAT_SECTOR_SIZE(exfat->bs);
-	return true;
+	return 0;
 err:
 	free(bs);
 	exfat->bs = NULL;
-	return false;
+	return (int)ret;
 }
 
 static void dentry_calc_checksum(struct exfat_dentry *dentry,
@@ -1392,10 +1395,10 @@ void exfat_show_stat(void)
 
 int main(int argc, char * const argv[])
 {
-	int c, ret;
 	struct fsck_user_input ui;
 	struct exfat_blk_dev bd;
 	struct exfat *exfat = NULL;
+	int c, ret, exit_code;
 	bool version_only = false;
 
 	memset(&ui, 0, sizeof(ui));
@@ -1463,15 +1466,15 @@ int main(int argc, char * const argv[])
 
 	exfat = alloc_exfat(&bd);
 	if (!exfat) {
-		ret = FSCK_EXIT_OPERATION_ERROR;
+		ret = -ENOMEM;
 		goto err;
 	}
 	exfat->options = ui.options;
 
 	exfat_debug("verifying boot regions...\n");
-	if (!exfat_boot_region_check(exfat)) {
+	ret = exfat_boot_region_check(exfat);
+	if (ret) {
 		exfat_err("failed to verify boot regions.\n");
-		ret = FSCK_EXIT_ERRORS_LEFT;
 		goto err;
 	}
 
@@ -1480,30 +1483,36 @@ int main(int argc, char * const argv[])
 	exfat_debug("verifying root directory...\n");
 	if (!exfat_root_dir_check(exfat)) {
 		exfat_err("failed to verify root directory.\n");
-		ret = FSCK_EXIT_ERRORS_LEFT;
+		ret = -EINVAL;
 		goto out;
 	}
 
 	exfat_debug("verifying directory entries...\n");
 	if (!exfat_filesystem_check(exfat)) {
 		exfat_err("failed to verify directory entries.\n");
-		ret = FSCK_EXIT_ERRORS_LEFT;
+		ret = -EINVAL;
 		goto out;
 	}
 
-	if (ui.ei.writeable)
-		fsync(bd.dev_fd);
+	if (ui.ei.writeable && fsync(bd.dev_fd)) {
+		ret = -EIO;
+		goto err;
+	}
 	exfat_mark_volume_dirty(exfat, false);
 
 	printf("%s: clean\n", ui.ei.dev_name);
-	if (exfat->dirty)
-		ret = FSCK_EXIT_CORRECTED;
-	else
-		ret = FSCK_EXIT_NO_ERRORS;
 out:
 	exfat_show_stat();
 err:
+	if (ret == -EINVAL)
+		exit_code = FSCK_EXIT_ERRORS_LEFT;
+	else if (ret)
+		exit_code = FSCK_EXIT_OPERATION_ERROR;
+	else if (exfat->dirty)
+		exit_code = FSCK_EXIT_CORRECTED;
+	else
+		exit_code = FSCK_EXIT_NO_ERRORS;
 	free_exfat(exfat);
 	close(bd.dev_fd);
-	return ret;
+	return exit_code;
 }
