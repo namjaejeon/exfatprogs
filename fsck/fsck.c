@@ -614,6 +614,33 @@ out_write:
 	return 0;
 }
 
+static int exfat_mark_volume_dirty(struct exfat *exfat, bool dirty)
+{
+	uint16_t flags;
+
+	if (!(exfat->options & FSCK_OPTS_REPAIR_WRITE))
+		return 0;
+
+	flags = le16_to_cpu(exfat->bs->bsx.vol_flags);
+	if (dirty)
+		flags |= 0x02;
+	else
+		flags &= ~0x02;
+
+	exfat->bs->bsx.vol_flags = cpu_to_le16(flags);
+	if (exfat_write(exfat->blk_dev->dev_fd, exfat->bs,
+			sizeof(struct pbr), 0) != (ssize_t)sizeof(struct pbr)) {
+		exfat_err("failed to set VolumeDirty\n");
+		return -EIO;
+	}
+
+	if (fsync(exfat->blk_dev->dev_fd) != 0) {
+		exfat_err("failed to set VolumeDirty\n");
+		return -EIO;
+	}
+	return 0;
+}
+
 static bool exfat_boot_region_check(struct exfat *exfat)
 {
 	struct pbr *bs;
@@ -649,13 +676,6 @@ static bool exfat_boot_region_check(struct exfat *exfat)
 		goto err;
 	}
 
-	ret = boot_region_checksum(exfat);
-	if (ret) {
-		exfat_err("failed to verify the checksum of a boot region. %zd\n",
-			ret);
-		goto err;
-	}
-
 	if (bs->bsx.fs_version[1] != 1 || bs->bsx.fs_version[0] != 0) {
 		exfat_err("unsupported exfat version: %d.%d\n",
 				bs->bsx.fs_version[1], bs->bsx.fs_version[0]);
@@ -683,10 +703,21 @@ static bool exfat_boot_region_check(struct exfat *exfat)
 		goto err;
 	}
 
+	if (exfat_mark_volume_dirty(exfat, true)) {
+		exfat_err("failed to set VolumeDirty\n");
+		goto err;
+	}
+
+	ret = boot_region_checksum(exfat);
+	if (ret) {
+		exfat_err("failed to verify the checksum of a boot region. %zd\n",
+			ret);
+		goto err;
+	}
+
 	exfat->clus_count = le32_to_cpu(exfat->bs->bsx.clu_count);
 	exfat->clus_size = EXFAT_CLUSTER_SIZE(exfat->bs);
 	exfat->sect_size = EXFAT_SECTOR_SIZE(exfat->bs);
-
 	return true;
 err:
 	free(bs);
@@ -1379,25 +1410,25 @@ int main(int argc, char * const argv[])
 	while ((c = getopt_long(argc, argv, "rynpVvh", opts, NULL)) != EOF) {
 		switch (c) {
 		case 'n':
-			if (ui.options & FSCK_OPTS_REPAIR)
+			if (ui.options & FSCK_OPTS_REPAIR_ALL)
 				usage(argv[0]);
 			ui.options |= FSCK_OPTS_REPAIR_NO;
 			ui.ei.writeable = false;
 			break;
 		case 'r':
-			if (ui.options & FSCK_OPTS_REPAIR)
+			if (ui.options & FSCK_OPTS_REPAIR_ALL)
 				usage(argv[0]);
 			ui.options |= FSCK_OPTS_REPAIR_ASK;
 			ui.ei.writeable = true;
 			break;
 		case 'y':
-			if (ui.options & FSCK_OPTS_REPAIR)
+			if (ui.options & FSCK_OPTS_REPAIR_ALL)
 				usage(argv[0]);
 			ui.options |= FSCK_OPTS_REPAIR_YES;
 			ui.ei.writeable = true;
 			break;
 		case 'p':
-			if (ui.options & FSCK_OPTS_REPAIR)
+			if (ui.options & FSCK_OPTS_REPAIR_ALL)
 				usage(argv[0]);
 			ui.options |= FSCK_OPTS_REPAIR_AUTO;
 			ui.ei.writeable = true;
@@ -1462,6 +1493,8 @@ int main(int argc, char * const argv[])
 
 	if (ui.ei.writeable)
 		fsync(bd.dev_fd);
+	exfat_mark_volume_dirty(exfat, false);
+
 	printf("%s: clean\n", ui.ei.dev_name);
 	if (exfat->dirty)
 		ret = FSCK_EXIT_CORRECTED;

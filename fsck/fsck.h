@@ -49,7 +49,8 @@ enum fsck_ui_options {
 	FSCK_OPTS_REPAIR_YES	= 0x02,
 	FSCK_OPTS_REPAIR_NO	= 0x04,
 	FSCK_OPTS_REPAIR_AUTO	= 0x08,
-	FSCK_OPTS_REPAIR	= 0x0f,
+	FSCK_OPTS_REPAIR_WRITE	= 0x0b,
+	FSCK_OPTS_REPAIR_ALL	= 0x0f,
 };
 
 struct exfat {
