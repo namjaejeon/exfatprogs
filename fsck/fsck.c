@@ -1276,14 +1276,14 @@ static int reclaim_free_clusters(struct exfat *exfat)
  * 2. free all of file exfat_nodes.
  * 3. if the directory does not have children, free its exfat_node.
  */
-static bool exfat_filesystem_check(struct exfat *exfat)
+static int exfat_filesystem_check(struct exfat *exfat)
 {
 	struct exfat_inode *dir;
-	bool ret = true;
+	int ret = 0, dir_errors;
 
 	if (!exfat->root) {
 		exfat_err("root is NULL\n");
-		return false;
+		return -ENOENT;
 	}
 
 	list_add(&exfat->root->list, &exfat->dir_list);
@@ -1293,18 +1293,19 @@ static bool exfat_filesystem_check(struct exfat *exfat)
 
 		if (!(dir->attr & ATTR_SUBDIR)) {
 			resolve_path(&path_resolve_ctx, dir);
-			ret = false;
 			exfat_err("failed to travel directories. "
 					"the node is not directory: %s\n",
 					path_resolve_ctx.local_path);
+			ret = -EINVAL;
 			goto out;
 		}
 
-		if (read_children(exfat, dir)) {
+		dir_errors = read_children(exfat, dir);
+		if (dir_errors) {
 			resolve_path(&path_resolve_ctx, dir);
-			ret = false;
 			exfat_err("failed to check dentries: %s\n",
 					path_resolve_ctx.local_path);
+			ret = dir_errors;
 		}
 
 		list_del(&dir->list);
@@ -1314,9 +1315,8 @@ static bool exfat_filesystem_check(struct exfat *exfat)
 out:
 	exfat_free_dir_list(exfat);
 	exfat->root = NULL;
-	if (exfat->dirty_fat)
-		if (reclaim_free_clusters(exfat))
-			return false;
+	if (exfat->dirty_fat && reclaim_free_clusters(exfat))
+		return -EIO;
 	return ret;
 }
 
@@ -1488,9 +1488,9 @@ int main(int argc, char * const argv[])
 	}
 
 	exfat_debug("verifying directory entries...\n");
-	if (!exfat_filesystem_check(exfat)) {
+	ret = exfat_filesystem_check(exfat);
+	if (ret) {
 		exfat_err("failed to verify directory entries.\n");
-		ret = -EINVAL;
 		goto out;
 	}
 
