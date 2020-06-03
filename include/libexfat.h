@@ -94,19 +94,19 @@ extern unsigned int print_level;
 #define EXFAT_INFO	(2)
 #define EXFAT_DEBUG	(3)
 
-#define exfat_msg(level, fmt, ...)						\
-	do {									\
-		if (print_level >= level) {					\
-			if (print_level == EXFAT_INFO)				\
-				printf(fmt, ##__VA_ARGS__);		\
-			else							\
-				printf("[%s:%4d] " fmt,				\
-					__func__, __LINE__, ##__VA_ARGS__);	\
-		}								\
-	} while (0)								\
+#define exfat_msg(level, dir, fmt, ...)					\
+	do {								\
+		if (print_level >= level) {				\
+			fprintf(dir, fmt, ##__VA_ARGS__);		\
+		}							\
+	} while (0)							\
 
-#define exfat_err(fmt, ...)	exfat_msg(EXFAT_ERROR, fmt, ##__VA_ARGS__)
-#define exfat_info(fmt, ...)	exfat_msg(EXFAT_INFO, fmt, ##__VA_ARGS__)
-#define exfat_debug(fmt, ...)	exfat_msg(EXFAT_DEBUG, fmt, ##__VA_ARGS__)
+#define exfat_err(fmt, ...)	exfat_msg(EXFAT_ERROR, stderr,		\
+					fmt, ##__VA_ARGS__)
+#define exfat_info(fmt, ...)	exfat_msg(EXFAT_INFO, stdout,		\
+					fmt, ##__VA_ARGS__)
+#define exfat_debug(fmt, ...)	exfat_msg(EXFAT_DEBUG, stdout,		\
+					"[%s:%4d] " fmt, __func__, 	\
+					__LINE__, ##__VA_ARGS__)
 
 #endif /* !_LIBEXFAT_H */
