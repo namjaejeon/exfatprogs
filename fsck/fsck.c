@@ -1413,25 +1413,21 @@ int main(int argc, char * const argv[])
 			if (ui.options & FSCK_OPTS_REPAIR_ALL)
 				usage(argv[0]);
 			ui.options |= FSCK_OPTS_REPAIR_NO;
-			ui.ei.writeable = false;
 			break;
 		case 'r':
 			if (ui.options & FSCK_OPTS_REPAIR_ALL)
 				usage(argv[0]);
 			ui.options |= FSCK_OPTS_REPAIR_ASK;
-			ui.ei.writeable = true;
 			break;
 		case 'y':
 			if (ui.options & FSCK_OPTS_REPAIR_ALL)
 				usage(argv[0]);
 			ui.options |= FSCK_OPTS_REPAIR_YES;
-			ui.ei.writeable = true;
 			break;
 		case 'p':
 			if (ui.options & FSCK_OPTS_REPAIR_ALL)
 				usage(argv[0]);
 			ui.options |= FSCK_OPTS_REPAIR_AUTO;
-			ui.ei.writeable = true;
 			break;
 		case 'V':
 			version_only = true;
@@ -1448,11 +1444,17 @@ int main(int argc, char * const argv[])
 	}
 
 	show_version();
-	if (version_only)
-		exit(FSCK_EXIT_SYNTAX_ERROR);
-
 	if (optind != argc - 1)
 		usage(argv[0]);
+
+	if (version_only)
+		exit(FSCK_EXIT_SYNTAX_ERROR);
+	if (ui.options & FSCK_OPTS_REPAIR_WRITE)
+		ui.ei.writeable = true;
+	else {
+		ui.options |= FSCK_OPTS_REPAIR_NO;
+		ui.ei.writeable = false;
+	}
 
 	snprintf(ui.ei.dev_name, sizeof(ui.ei.dev_name), "%s", argv[optind]);
 	ret = exfat_get_blk_dev_info(&ui.ei, &bd);
