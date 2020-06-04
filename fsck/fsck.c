@@ -178,21 +178,6 @@ static void inode_free_ancestors(struct exfat_inode *child)
 	return;
 }
 
-static struct exfat *alloc_exfat(struct exfat_blk_dev *bd)
-{
-	struct exfat *exfat;
-
-	exfat = (struct exfat *)calloc(1, sizeof(*exfat));
-	if (!exfat) {
-		exfat_err("failed to allocate exfat\n");
-		return NULL;
-	}
-
-	exfat->blk_dev = bd;
-	INIT_LIST_HEAD(&exfat->dir_list);
-	return exfat;
-}
-
 static void free_exfat(struct exfat *exfat)
 {
 	int i;
@@ -212,6 +197,58 @@ static void free_exfat(struct exfat *exfat)
 		}
 		free(exfat);
 	}
+}
+
+static struct exfat *alloc_exfat(struct exfat_blk_dev *bd, struct pbr *bs)
+{
+	struct exfat *exfat;
+	int i;
+
+	exfat = (struct exfat *)calloc(1, sizeof(*exfat));
+	if (!exfat) {
+		free(bs);
+		exfat_err("failed to allocate exfat\n");
+		return NULL;
+	}
+
+	INIT_LIST_HEAD(&exfat->dir_list);
+	exfat->blk_dev = bd;
+	exfat->bs = bs;
+	exfat->clus_count = le32_to_cpu(bs->bsx.clu_count);
+	exfat->clus_size = EXFAT_CLUSTER_SIZE(bs);
+	exfat->sect_size = EXFAT_SECTOR_SIZE(bs);
+
+	/* TODO: bitmap could be very large. */
+	exfat->alloc_bitmap = (char *)calloc(1,
+			EXFAT_BITMAP_SIZE(exfat->clus_count));
+	if (!exfat->alloc_bitmap) {
+		exfat_err("failed to allocate bitmap\n");
+		goto err;
+	}
+
+	exfat->disk_bitmap = (char *)malloc(
+				EXFAT_BITMAP_SIZE(exfat->clus_count));
+	if (!exfat->disk_bitmap) {
+		exfat_err("failed to allocate bitmap\n");
+		goto err;
+	}
+
+	/* allocate cluster buffers */
+	for (i = 0; i < 2; i++) {
+		exfat->buffer_desc[i].buffer =
+			(char *)malloc(exfat->clus_size);
+		if (!exfat->buffer_desc[i].buffer)
+			goto err;
+		exfat->buffer_desc[i].dirty =
+			(char *)calloc(
+			(exfat->clus_size / exfat->sect_size), 1);
+		if (!exfat->buffer_desc[i].dirty)
+			goto err;
+	}
+	return exfat;
+err:
+	free_exfat(exfat);
+	return NULL;
 }
 
 static void exfat_free_dir_list(struct exfat *exfat)
@@ -641,10 +678,9 @@ static int exfat_mark_volume_dirty(struct exfat *exfat, bool dirty)
 	return 0;
 }
 
-static int exfat_boot_region_check(struct exfat *exfat)
+static int read_boot_region(struct exfat_blk_dev *bd, struct pbr **pbr)
 {
 	struct pbr *bs;
-	ssize_t ret;
 
 	bs = (struct pbr *)malloc(sizeof(struct pbr));
 	if (!bs) {
@@ -652,41 +688,50 @@ static int exfat_boot_region_check(struct exfat *exfat)
 		return -ENOMEM;
 	}
 
-	exfat->bs = bs;
-
-	ret = exfat_read(exfat->blk_dev->dev_fd, bs, sizeof(*bs), 0);
-	if (ret != sizeof(*bs)) {
-		exfat_err("failed to read a boot sector. %zd\n", ret);
-		ret = -EIO;
-		goto err;
+	if (exfat_read(bd->dev_fd, bs, sizeof(*bs), 0) !=
+			(ssize_t)sizeof(*bs)) {
+		exfat_err("failed to read a boot sector\n");
+		free(bs);
+		return -EIO;
 	}
 
-	ret = -EINVAL;
+	*pbr = bs;
+	return 0;
+}
+
+static int exfat_boot_region_check(struct exfat *exfat)
+{
+	struct pbr *bs;
+	int ret;
+
+
+	bs = exfat->bs;
+
 	if (memcmp(bs->bpb.oem_name, "EXFAT   ", 8) != 0) {
 		exfat_err("failed to find exfat file system.\n");
-		goto err;
+		return -EINVAL;
 	}
 
 	if (EXFAT_SECTOR_SIZE(bs) < 512 || EXFAT_SECTOR_SIZE(bs) > 4 * KB) {
 		exfat_err("too small or big sector size: %d\n",
 				EXFAT_SECTOR_SIZE(bs));
-		goto err;
+		return -EINVAL;
 	}
 
 	if (EXFAT_CLUSTER_SIZE(bs) > 32 * MB) {
 		exfat_err("too big cluster size: %d\n", EXFAT_CLUSTER_SIZE(bs));
-		goto err;
+		return -EINVAL;
 	}
 
 	if (bs->bsx.fs_version[1] != 1 || bs->bsx.fs_version[0] != 0) {
 		exfat_err("unsupported exfat version: %d.%d\n",
 				bs->bsx.fs_version[1], bs->bsx.fs_version[0]);
-		goto err;
+		return -EINVAL;
 	}
 
 	if (bs->bsx.num_fats != 1) {
 		exfat_err("unsupported FAT count: %d\n", bs->bsx.num_fats);
-		goto err;
+		return -EINVAL;
 	}
 
 	if (le64_to_cpu(bs->bsx.vol_length) * EXFAT_SECTOR_SIZE(bs) >
@@ -694,7 +739,7 @@ static int exfat_boot_region_check(struct exfat *exfat)
 		exfat_err("too large sector count: %" PRIu64 "\n, expected: %llu\n",
 				le64_to_cpu(bs->bsx.vol_length),
 				exfat->blk_dev->num_sectors);
-		goto err;
+		return -EINVAL;
 	}
 
 	if (le32_to_cpu(bs->bsx.clu_count) * EXFAT_CLUSTER_SIZE(bs) >
@@ -702,30 +747,16 @@ static int exfat_boot_region_check(struct exfat *exfat)
 		exfat_err("too large cluster count: %u, expected: %u\n",
 				le32_to_cpu(bs->bsx.clu_count),
 				exfat->blk_dev->num_clusters);
-		goto err;
-	}
-
-	if (exfat_mark_volume_dirty(exfat, true)) {
-		exfat_err("failed to set VolumeDirty\n");
-		ret = -EIO;
-		goto err;
+		return -EINVAL;
 	}
 
 	ret = boot_region_checksum(exfat);
 	if (ret) {
-		exfat_err("failed to verify the checksum of a boot region. %zd\n",
+		exfat_err("failed to verify the checksum of a boot region. %d\n",
 			ret);
-		goto err;
+		return ret;
 	}
-
-	exfat->clus_count = le32_to_cpu(exfat->bs->bsx.clu_count);
-	exfat->clus_size = EXFAT_CLUSTER_SIZE(exfat->bs);
-	exfat->sect_size = EXFAT_SECTOR_SIZE(exfat->bs);
 	return 0;
-err:
-	free(bs);
-	exfat->bs = NULL;
-	return (int)ret;
 }
 
 static void dentry_calc_checksum(struct exfat_dentry *dentry,
@@ -989,10 +1020,6 @@ static bool read_bitmap(struct exfat_de_iter *iter)
 			DIV_ROUND_UP(exfat->disk_bitmap_size,
 			EXFAT_CLUSTER_SIZE(exfat->bs)));
 
-	exfat->disk_bitmap = (char *)malloc(
-				EXFAT_BITMAP_SIZE(exfat->clus_count));
-	if (!exfat->disk_bitmap)
-		return false;
 	if (exfat_read(exfat->blk_dev->dev_fd, exfat->disk_bitmap,
 			exfat->disk_bitmap_size,
 			exfat_c2o(exfat, exfat->disk_bitmap_clus)) !=
@@ -1324,28 +1351,6 @@ static int exfat_root_dir_check(struct exfat *exfat)
 {
 	struct exfat_inode *root;
 	clus_t clus_count;
-	int i;
-
-	/* TODO: bitmap could be very large. */
-	exfat->alloc_bitmap = (char *)calloc(1,
-			EXFAT_BITMAP_SIZE(exfat->clus_count));
-	if (!exfat->alloc_bitmap) {
-		exfat_err("failed to allocate bitmap\n");
-		return -ENOMEM;
-	}
-
-	/* allocate cluster buffers */
-	for (i = 0; i < 2; i++) {
-		exfat->buffer_desc[i].buffer =
-			(char *)malloc(exfat->clus_size);
-		if (!exfat->buffer_desc[i].buffer)
-			return -ENOMEM;
-		exfat->buffer_desc[i].dirty =
-			(char *)calloc(
-			(exfat->clus_size / exfat->sect_size), 1);
-		if (!exfat->buffer_desc[i].dirty)
-			return -ENOMEM;
-	}
 
 	root = alloc_exfat_inode(ATTR_SUBDIR);
 	if (!root) {
@@ -1395,6 +1400,7 @@ int main(int argc, char * const argv[])
 	struct fsck_user_input ui;
 	struct exfat_blk_dev bd;
 	struct exfat *exfat = NULL;
+	struct pbr *bs = NULL;
 	int c, ret, exit_code;
 	bool version_only = false;
 
@@ -1463,12 +1469,21 @@ int main(int argc, char * const argv[])
 		return FSCK_EXIT_OPERATION_ERROR;
 	}
 
-	exfat = alloc_exfat(&bd);
+	ret = read_boot_region(&bd, &bs);
+	if (ret)
+		goto err;
+
+	exfat = alloc_exfat(&bd, bs);
 	if (!exfat) {
 		ret = -ENOMEM;
 		goto err;
 	}
 	exfat->options = ui.options;
+
+	if (exfat_mark_volume_dirty(exfat, true)) {
+		ret = -EIO;
+		goto err;
+	}
 
 	exfat_debug("verifying boot regions...\n");
 	ret = exfat_boot_region_check(exfat);
@@ -1476,8 +1491,6 @@ int main(int argc, char * const argv[])
 		exfat_err("failed to verify boot regions.\n");
 		goto err;
 	}
-
-	exfat_show_info(exfat);
 
 	exfat_debug("verifying root directory...\n");
 	ret = exfat_root_dir_check(exfat);
@@ -1495,7 +1508,7 @@ int main(int argc, char * const argv[])
 
 	if (ui.ei.writeable && fsync(bd.dev_fd)) {
 		ret = -EIO;
-		goto err;
+		goto out;
 	}
 	exfat_mark_volume_dirty(exfat, false);
 
