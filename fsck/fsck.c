@@ -695,68 +695,54 @@ static int read_boot_region(struct exfat_blk_dev *bd, struct pbr **pbr)
 		return -EIO;
 	}
 
-	*pbr = bs;
-	return 0;
-}
-
-static int exfat_boot_region_check(struct exfat *exfat)
-{
-	struct pbr *bs;
-	int ret;
-
-
-	bs = exfat->bs;
-
 	if (memcmp(bs->bpb.oem_name, "EXFAT   ", 8) != 0) {
 		exfat_err("failed to find exfat file system.\n");
-		return -EINVAL;
+		goto err;
 	}
 
 	if (EXFAT_SECTOR_SIZE(bs) < 512 || EXFAT_SECTOR_SIZE(bs) > 4 * KB) {
 		exfat_err("too small or big sector size: %d\n",
 				EXFAT_SECTOR_SIZE(bs));
-		return -EINVAL;
+		goto err;
 	}
 
 	if (EXFAT_CLUSTER_SIZE(bs) > 32 * MB) {
 		exfat_err("too big cluster size: %d\n", EXFAT_CLUSTER_SIZE(bs));
-		return -EINVAL;
+		goto err;
 	}
 
 	if (bs->bsx.fs_version[1] != 1 || bs->bsx.fs_version[0] != 0) {
 		exfat_err("unsupported exfat version: %d.%d\n",
 				bs->bsx.fs_version[1], bs->bsx.fs_version[0]);
-		return -EINVAL;
+		goto err;
 	}
 
 	if (bs->bsx.num_fats != 1) {
 		exfat_err("unsupported FAT count: %d\n", bs->bsx.num_fats);
-		return -EINVAL;
+		goto err;
 	}
 
 	if (le64_to_cpu(bs->bsx.vol_length) * EXFAT_SECTOR_SIZE(bs) >
-			exfat->blk_dev->size) {
+			bd->size) {
 		exfat_err("too large sector count: %" PRIu64 "\n, expected: %llu\n",
 				le64_to_cpu(bs->bsx.vol_length),
-				exfat->blk_dev->num_sectors);
-		return -EINVAL;
+				bd->num_sectors);
+		goto err;
 	}
 
 	if (le32_to_cpu(bs->bsx.clu_count) * EXFAT_CLUSTER_SIZE(bs) >
-			exfat->blk_dev->size) {
+			bd->size) {
 		exfat_err("too large cluster count: %u, expected: %u\n",
 				le32_to_cpu(bs->bsx.clu_count),
-				exfat->blk_dev->num_clusters);
-		return -EINVAL;
+				bd->num_clusters);
+		goto err;
 	}
 
-	ret = boot_region_checksum(exfat);
-	if (ret) {
-		exfat_err("failed to verify the checksum of a boot region. %d\n",
-			ret);
-		return ret;
-	}
+	*pbr = bs;
 	return 0;
+err:
+	free(bs);
+	return -EINVAL;
 }
 
 static void dentry_calc_checksum(struct exfat_dentry *dentry,
@@ -1485,12 +1471,9 @@ int main(int argc, char * const argv[])
 		goto err;
 	}
 
-	exfat_debug("verifying boot regions...\n");
-	ret = exfat_boot_region_check(exfat);
-	if (ret) {
-		exfat_err("failed to verify boot regions.\n");
+	ret = boot_region_checksum(exfat);
+	if (ret)
 		goto err;
-	}
 
 	exfat_debug("verifying root directory...\n");
 	ret = exfat_root_dir_check(exfat);
