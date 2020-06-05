@@ -61,8 +61,8 @@ int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 {
 	iter->exfat = exfat;
 	iter->parent = dir;
-	iter->read_size = EXFAT_CLUSTER_SIZE(exfat->bs);
-	iter->write_size = EXFAT_SECTOR_SIZE(exfat->bs);
+	iter->read_size = exfat->clus_size;
+	iter->write_size = exfat->sect_size;
 
 	if (!iter->buffer_desc)
 		iter->buffer_desc = exfat->buffer_desc;

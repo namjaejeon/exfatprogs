@@ -443,7 +443,7 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 					ER_FILE_SMALLER_SIZE,
 					"more clusters are allocated. "
 					"truncate to %u bytes",
-					count * EXFAT_CLUSTER_SIZE(exfat->bs)))
+					count * exfat->clus_size))
 				goto truncate_file;
 			else
 				return -EINVAL;
@@ -459,7 +459,7 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 					ER_FILE_DUPLICATED_CLUS,
 					"cluster is already allocated for "
 					"the other file. truncated to %u bytes",
-					count * EXFAT_CLUSTER_SIZE(exfat->bs)))
+					count * exfat->clus_size))
 				goto truncate_file;
 			else
 				return -EINVAL;
@@ -476,7 +476,7 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 						"broken cluster chain. "
 						"truncate to %u bytes",
 						count *
-						EXFAT_CLUSTER_SIZE(exfat->bs)))
+						exfat->clus_size))
 					goto truncate_file;
 
 				else
@@ -490,7 +490,7 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 						"cluster is marked as free. "
 						"truncate to %u bytes",
 						count *
-						EXFAT_CLUSTER_SIZE(exfat->bs)))
+						exfat->clus_size))
 					goto truncate_file;
 
 				else
@@ -509,7 +509,7 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 		if (repair_file_ask(&exfat->de_iter, node,
 			ER_FILE_LARGER_SIZE, "less clusters are allocated. "
 			"truncates to %u bytes",
-			count * EXFAT_CLUSTER_SIZE(exfat->bs)))
+			count * exfat->clus_size))
 			goto truncate_file;
 		else
 			return -EINVAL;
@@ -517,19 +517,19 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 
 	return 0;
 truncate_file:
-	node->size = count * EXFAT_CLUSTER_SIZE(exfat->bs);
+	node->size = count * exfat->clus_size;
 	if (!heap_clus(exfat, prev))
 		node->first_clus = EXFAT_FREE_CLUSTER;
 
 	exfat_de_iter_get_dirty(&exfat->de_iter, 1, &stream_de);
-	if (count * EXFAT_CLUSTER_SIZE(exfat->bs) <
+	if (count * exfat->clus_size <
 			le64_to_cpu(stream_de->stream_valid_size))
 		stream_de->stream_valid_size = cpu_to_le64(
-				count * EXFAT_CLUSTER_SIZE(exfat->bs));
+				count * exfat->clus_size);
 	if (!heap_clus(exfat, prev))
 		stream_de->stream_start_clu = EXFAT_FREE_CLUSTER;
 	stream_de->stream_size = cpu_to_le64(
-			count * EXFAT_CLUSTER_SIZE(exfat->bs));
+			count * exfat->clus_size);
 
 	/* remaining clusters will be freed while FAT is compared with
 	 * alloc_bitmap.
@@ -805,7 +805,7 @@ static bool check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 		return false;
 
 	if (node->size > le32_to_cpu(exfat->bs->bsx.clu_count) *
-				EXFAT_CLUSTER_SIZE(exfat->bs)) {
+				exfat->clus_size) {
 		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
 		exfat_err("size %" PRIu64 " is greater than cluster heap: %s\n",
 				node->size, path_resolve_ctx.local_path);
@@ -820,10 +820,10 @@ static bool check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 	}
 
 	if ((node->attr & ATTR_SUBDIR) &&
-			node->size % EXFAT_CLUSTER_SIZE(exfat->bs) != 0) {
+			node->size % exfat->clus_size != 0) {
 		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
 		exfat_err("directory size %" PRIu64 " is not divisible by %d: %s\n",
-				node->size, EXFAT_CLUSTER_SIZE(exfat->bs),
+				node->size, exfat->clus_size,
 				path_resolve_ctx.local_path);
 		ret = false;
 	}
@@ -1018,7 +1018,7 @@ static bool read_bitmap(struct exfat_de_iter *iter)
 
 	exfat_bitmap_set_range(exfat, le64_to_cpu(dentry->bitmap_start_clu),
 			DIV_ROUND_UP(exfat->disk_bitmap_size,
-			EXFAT_CLUSTER_SIZE(exfat->bs)));
+			exfat->clus_size));
 
 	if (exfat_read(exfat->blk_dev->dev_fd, exfat->disk_bitmap,
 			exfat->disk_bitmap_size,
@@ -1081,7 +1081,7 @@ static bool read_upcase_table(struct exfat_de_iter *iter)
 
 	exfat_bitmap_set_range(exfat, le32_to_cpu(dentry->upcase_start_clu),
 			DIV_ROUND_UP(le64_to_cpu(dentry->upcase_size),
-			EXFAT_CLUSTER_SIZE(exfat->bs)));
+			exfat->clus_size));
 
 	free(upcase);
 	return true;
@@ -1364,7 +1364,7 @@ static int exfat_root_dir_check(struct exfat *exfat)
 		free_exfat_inode(root);
 		return -EINVAL;
 	}
-	root->size = clus_count * EXFAT_CLUSTER_SIZE(exfat->bs);
+	root->size = clus_count * exfat->clus_size;
 
 	exfat->root = root;
 	exfat_debug("root directory: start cluster[0x%x] size[0x%" PRIx64 "]\n",
