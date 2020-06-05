@@ -1358,7 +1358,7 @@ static int exfat_root_dir_check(struct exfat *exfat)
 	return 0;
 }
 
-void exfat_show_info(struct exfat *exfat)
+static void exfat_show_info(struct exfat *exfat)
 {
 	exfat_info("Bytes per sector: %d\n",
 			1 << exfat->bs->bsx.sect_size_bits);
@@ -1371,7 +1371,7 @@ void exfat_show_info(struct exfat *exfat)
 			le32_to_cpu(exfat->bs->bsx.clu_offset));
 }
 
-void exfat_show_stat(void)
+static void exfat_show_stat(void)
 {
 	exfat_debug("Found directories: %ld\n", exfat_stat.dir_count);
 	exfat_debug("Found files: %ld\n", exfat_stat.file_count);
@@ -1474,6 +1474,8 @@ int main(int argc, char * const argv[])
 	ret = boot_region_checksum(exfat);
 	if (ret)
 		goto err;
+
+	exfat_show_info(exfat);
 
 	exfat_debug("verifying root directory...\n");
 	ret = exfat_root_dir_check(exfat);
