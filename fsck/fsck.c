@@ -415,7 +415,7 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 {
 	struct exfat_dentry *stream_de;
 	clus_t clus, prev, next;
-	clus_t count, max_count;
+	uint64_t count, max_count;
 
 	clus = node->first_clus;
 	prev = EXFAT_EOF_CLUSTER;
@@ -442,7 +442,7 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 			if (repair_file_ask(&exfat->de_iter, node,
 					ER_FILE_SMALLER_SIZE,
 					"more clusters are allocated. "
-					"truncate to %u bytes",
+					"truncate to %" PRIu64 " bytes",
 					count * exfat->clus_size))
 				goto truncate_file;
 			else
@@ -458,7 +458,8 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 			if (repair_file_ask(&exfat->de_iter, node,
 					ER_FILE_DUPLICATED_CLUS,
 					"cluster is already allocated for "
-					"the other file. truncated to %u bytes",
+					"the other file. truncated to %"
+					PRIu64 " bytes",
 					count * exfat->clus_size))
 				goto truncate_file;
 			else
@@ -474,9 +475,9 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 				if (repair_file_ask(&exfat->de_iter, node,
 						ER_FILE_INVALID_CLUS,
 						"broken cluster chain. "
-						"truncate to %u bytes",
-						count *
-						exfat->clus_size))
+						"truncate to %"
+						PRIu64 " bytes",
+						count * exfat->clus_size))
 					goto truncate_file;
 
 				else
@@ -488,9 +489,9 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 				if (repair_file_ask(&exfat->de_iter, node,
 						ER_FILE_INVALID_CLUS,
 						"cluster is marked as free. "
-						"truncate to %u bytes",
-						count *
-						exfat->clus_size))
+						"truncate to %"
+						PRIu64 " bytes",
+						count * exfat->clus_size))
 					goto truncate_file;
 
 				else
@@ -508,7 +509,7 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 	if (count < max_count) {
 		if (repair_file_ask(&exfat->de_iter, node,
 			ER_FILE_LARGER_SIZE, "less clusters are allocated. "
-			"truncates to %u bytes",
+			"truncates to %" PRIu64 " bytes",
 			count * exfat->clus_size))
 			goto truncate_file;
 		else
@@ -791,7 +792,7 @@ static bool check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 		return false;
 
 	if (node->size > le32_to_cpu(exfat->bs->bsx.clu_count) *
-				exfat->clus_size) {
+				(uint64_t)exfat->clus_size) {
 		resolve_path_parent(&path_resolve_ctx, iter->parent, node);
 		exfat_err("size %" PRIu64 " is greater than cluster heap: %s\n",
 				node->size, path_resolve_ctx.local_path);
