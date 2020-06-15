@@ -17,12 +17,27 @@
 #include <errno.h>
 #include <math.h>
 #include <locale.h>
+#include <time.h>
 
 #include "exfat_ondisk.h"
 #include "libexfat.h"
 #include "mkfs.h"
 
 struct exfat_mkfs_info finfo;
+
+/* random serial generator based on current time */
+static unsigned int get_new_serial(void)
+{
+	struct timespec ts;
+
+	if (clock_gettime(CLOCK_REALTIME, &ts)) {
+		/* set 0000-0000 on error */
+		ts.tv_sec = 0;
+		ts.tv_nsec = 0;
+	}
+
+	return (unsigned int)(ts.tv_nsec << 12 | ts.tv_sec);
+}
 
 static void exfat_setup_boot_sector(struct pbr *ppbr,
 		struct exfat_blk_dev *bd, struct exfat_user_input *ui)
@@ -45,7 +60,7 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	pbsx->clu_offset = cpu_to_le32(finfo.clu_byte_off / bd->sector_size);
 	pbsx->clu_count = cpu_to_le32(finfo.total_clu_cnt);
 	pbsx->root_cluster = cpu_to_le32(finfo.root_start_clu);
-	pbsx->vol_serial = cpu_to_le32(1234);
+	pbsx->vol_serial = cpu_to_le32(finfo.volume_serial);
 	pbsx->vol_flags = 0;
 	pbsx->sect_size_bits = bd->sector_size_bits;
 	pbsx->sect_per_clus_bits = log2(ui->cluster_size / bd->sector_size);
@@ -437,6 +452,7 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	finfo.root_byte_off = round_up(finfo.ut_byte_off + finfo.ut_byte_len,
 		ui->cluster_size);
 	finfo.root_byte_len = sizeof(struct exfat_dentry) * 3;
+	finfo.volume_serial = get_new_serial();
 
 	return 0;
 }
