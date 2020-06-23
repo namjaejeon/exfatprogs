@@ -409,14 +409,14 @@ static struct option opts[] = {
 static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
-	if (ui->cluster_size > DEFAULT_CLUSTER_SIZE)
+	if (ui->cluster_size > DEFAULT_BOUNDARY_ALIGNMENT)
 		finfo.fat_byte_off = ui->cluster_size;
 	else
-		finfo.fat_byte_off = DEFAULT_CLUSTER_SIZE;
+		finfo.fat_byte_off = DEFAULT_BOUNDARY_ALIGNMENT;
 	finfo.fat_byte_len = round_up((bd->num_clusters * sizeof(int)),
 		ui->cluster_size);
 	finfo.clu_byte_off = round_up(finfo.fat_byte_off + finfo.fat_byte_len,
-		DEFAULT_CLUSTER_SIZE);
+		DEFAULT_BOUNDARY_ALIGNMENT);
 	finfo.total_clu_cnt = (bd->size - finfo.clu_byte_off) /
 		ui->cluster_size;
 	if (finfo.total_clu_cnt > EXFAT_MAX_NUM_CLUSTER) {
