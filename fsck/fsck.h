@@ -29,6 +29,7 @@ struct exfat_inode {
 
 struct buffer_desc {
 	clus_t		p_clus;
+	unsigned int	offset;
 	char		*buffer;
 	char		*dirty;
 };
