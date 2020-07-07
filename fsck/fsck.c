@@ -386,7 +386,7 @@ int get_next_clus(struct exfat *exfat, struct exfat_inode *node,
 		return 0;
 	}
 
-	offset = le32_to_cpu(exfat->bs->bsx.fat_offset) <<
+	offset = (off_t)le32_to_cpu(exfat->bs->bsx.fat_offset) <<
 				exfat->bs->bsx.sect_size_bits;
 	offset += sizeof(clus_t) * clus;
 
@@ -586,7 +586,7 @@ off_t exfat_c2o(struct exfat *exfat, unsigned int clus)
 		return ~0L;
 
 	return exfat_s2o(exfat, le32_to_cpu(exfat->bs->bsx.clu_offset) +
-				((clus - EXFAT_FIRST_CLUSTER) <<
+				((off_t)(clus - EXFAT_FIRST_CLUSTER) <<
 				 exfat->bs->bsx.sect_per_clus_bits));
 }
 
