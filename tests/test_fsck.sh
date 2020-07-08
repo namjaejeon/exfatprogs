@@ -19,10 +19,6 @@ else
 	TESTCASE_DIRS=$@
 	TEST_COUNT=$#
 fi
-if [ "$EUID" -ne "0" ]; then
-	echo "This script should be ran as root"
-	exit
-fi
 
 for TESTCASE_DIR in $TESTCASE_DIRS
 do
@@ -35,8 +31,8 @@ do
 	echo "-----------------------------------"
 
 	# Set up image file as loop device
-	unxz -cfk $TESTCASE_DIR/$IMAGE_FILE.xz > $IMAGE_FILE
-	sudo losetup -f $IMAGE_FILE
+	tar -C . -xf $TESTCASE_DIR/$IMAGE_FILE.tar.xz
+	losetup -f $IMAGE_FILE
 	DEV_FILE=`losetup -j $IMAGE_FILE | awk '{print $1}' | sed 's/://g'`
 
 	# Run fsck for repair
