@@ -1141,9 +1141,10 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 				goto err;
 			}
 			break;
+		case EXFAT_LAST:
+			goto out;
 		default:
-			if (IS_EXFAT_DELETED(dentry->type) ||
-					(dentry->type == EXFAT_UNUSED))
+			if (IS_EXFAT_DELETED(dentry->type))
 				break;
 			exfat_err("unknown entry type. 0x%x\n", dentry->type);
 			ret = -EINVAL;
@@ -1152,6 +1153,7 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 
 		exfat_de_iter_advance(de_iter, dentry_count);
 	}
+out:
 	list_splice(&sub_dir_list, &exfat->dir_list);
 	exfat_de_iter_flush(de_iter);
 	return 0;
