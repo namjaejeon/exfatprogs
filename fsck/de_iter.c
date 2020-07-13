@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #include "exfat_ondisk.h"
 #include "libexfat.h"
@@ -32,6 +33,88 @@ static ssize_t write_block(struct exfat_de_iter *iter, unsigned int block)
 		}
 	}
 	return 0;
+}
+
+static int read_ahead_first_blocks(struct exfat_de_iter *iter)
+{
+#ifdef POSIX_FADV_WILLNEED
+	struct exfat *exfat = iter->exfat;
+	clus_t clus_count;
+	unsigned int size;
+
+	clus_count = iter->parent->size / exfat->clus_size;
+
+	if (clus_count > 1) {
+		iter->ra_begin_offset = MAX((int)exfat->clus_size -
+				iter->ra_partial_size, 0);
+		iter->ra_next_clus = 1;
+		size = exfat->clus_size;
+	} else {
+		iter->ra_begin_offset = iter->ra_partial_size;
+		iter->ra_next_clus = 0;
+		size = iter->ra_partial_size;
+	}
+	return posix_fadvise(exfat->blk_dev->dev_fd,
+			exfat_c2o(exfat, iter->parent->first_clus), size,
+			POSIX_FADV_WILLNEED);
+#else
+	return -ENOTSUP;
+#endif
+}
+
+/**
+ * read the next fragment in advance, and assume the fragment
+ * which covers @clus is already read.
+ */
+static int read_ahead_next_blocks(struct exfat_de_iter *iter,
+		clus_t clus, unsigned int offset, clus_t p_clus)
+{
+#ifdef POSIX_FADV_WILLNEED
+	struct exfat *exfat = iter->exfat;
+	off_t device_offset;
+	clus_t clus_count, ra_clus, ra_p_clus;
+	unsigned int size, ra_offset;
+	int ret = 0;
+
+	clus_count = iter->parent->size / exfat->clus_size;
+	if (clus + 1 < clus_count) {
+		ra_clus = clus + 1;
+		if (ra_clus == iter->ra_next_clus &&
+				offset >= iter->ra_begin_offset) {
+			ret = get_next_clus(exfat, iter->parent,
+					p_clus, &ra_p_clus);
+			if (ra_p_clus == EXFAT_EOF_CLUSTER)
+				return -EIO;
+
+			device_offset = exfat_c2o(exfat, ra_p_clus);
+			size = ra_clus + 1 < clus_count ?
+				exfat->clus_size : iter->ra_partial_size;
+			ret = posix_fadvise(exfat->blk_dev->dev_fd,
+					device_offset, size,
+					POSIX_FADV_WILLNEED);
+			iter->ra_next_clus = ra_clus + 1;
+			iter->ra_begin_offset = 0;
+		}
+	} else {
+		ra_offset = offset + iter->ra_partial_size;
+		if (ra_offset >= iter->ra_begin_offset &&
+				ra_offset + iter->ra_partial_size <=
+				exfat->clus_size) {
+			device_offset = exfat_c2o(exfat, p_clus) + ra_offset;
+			ret = posix_fadvise(exfat->blk_dev->dev_fd,
+					device_offset, iter->ra_partial_size,
+					POSIX_FADV_WILLNEED);
+
+			iter->ra_begin_offset =
+				ra_offset + iter->ra_partial_size;
+			/* TODO: read blocks of the first child directory */
+		}
+	}
+
+	return ret;
+#else
+	return -ENOTSUP;
+#endif
 }
 
 static ssize_t read_block(struct exfat_de_iter *iter, unsigned int block)
@@ -71,6 +154,11 @@ static ssize_t read_block(struct exfat_de_iter *iter, unsigned int block)
 		}
 	}
 
+	read_ahead_next_blocks(iter,
+			(block * iter->read_size) / exfat->clus_size,
+			(block * iter->read_size) % exfat->clus_size,
+			desc->p_clus);
+
 	device_offset = exfat_c2o(exfat, desc->p_clus) + desc->offset;
 	return exfat_read(exfat->blk_dev->dev_fd, desc->buffer,
 			iter->read_size, device_offset);
@@ -82,11 +170,16 @@ int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 	iter->exfat = exfat;
 	iter->parent = dir;
 	iter->write_size = exfat->sect_size;
-	iter->read_size = exfat->clus_size <= 4*KB ? exfat->clus_size : 4 * KB;
+	iter->read_size = exfat->clus_size <= 4*KB ? exfat->clus_size : 4*KB;
+	if (exfat->clus_size <= 32 * KB)
+		iter->ra_partial_size = MAX(4 * KB, exfat->clus_size / 2);
+	else
+		iter->ra_partial_size = exfat->clus_size / 4;
 
 	if (!iter->buffer_desc)
 		iter->buffer_desc = exfat->buffer_desc;
 
+	read_ahead_first_blocks(iter);
 	if (read_block(iter, 0) != (ssize_t)iter->read_size) {
 		exfat_err("failed to read directory entries.\n");
 		return -EIO;

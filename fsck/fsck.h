@@ -38,6 +38,9 @@ struct exfat_de_iter {
 	struct exfat		*exfat;
 	struct exfat_inode	*parent;
 	struct buffer_desc	*buffer_desc;		/* cluster * 2 */
+	clus_t			ra_next_clus;
+	unsigned int		ra_begin_offset;
+	unsigned int		ra_partial_size;
 	unsigned int		read_size;		/* cluster size */
 	unsigned int		write_size;		/* sector size */
 	off_t			de_file_offset;
