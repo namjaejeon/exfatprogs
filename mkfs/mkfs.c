@@ -558,6 +558,8 @@ static long long parse_cluster_size(const char *size)
 	case 'k':
 		byte_size <<= 10;
 		break;
+	case '\0':
+		break;
 	default:
 		exfat_err("Wrong unit input('%c') for cluster size\n",
 				*data_unit);
