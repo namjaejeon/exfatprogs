@@ -1371,18 +1371,40 @@ static int exfat_root_dir_check(struct exfat *exfat)
 	return 0;
 }
 
+static char *bytes_to_human_readable(size_t bytes)
+{
+	static const char * const units[] = {"B", "KB", "MB", "GB", "TB", "PB"};
+	static char buf[15*4];
+	unsigned int i, shift, quoti, remain;
+
+	shift = 0;
+	for (i = 0; i < sizeof(units)/sizeof(units[0]); i++) {
+		if (bytes / (1ULL << (shift + 10)) == 0)
+			break;
+		shift += 10;
+	}
+
+	quoti = (unsigned int)(bytes / (1ULL << shift));
+	remain = 0;
+	if (shift > 0) {
+		remain = (unsigned int)
+			((bytes & ((1ULL << shift) - 1)) >> (shift - 10));
+		remain = (remain * 100) / 1024;
+	}
+
+	snprintf(buf, sizeof(buf), "%u.%02u %s", quoti, remain, units[i]);
+	return buf;
+}
+
 static void exfat_show_info(struct exfat *exfat, const char *dev_name,
 			int errors)
 {
-	exfat_info("Bytes per sector: %d\n",
-			1 << exfat->bs->bsx.sect_size_bits);
-	exfat_info("Sectors per cluster: %d\n",
-			1 << exfat->bs->bsx.sect_per_clus_bits);
-	exfat_info("Cluster heap count: %d(0x%x)\n",
-			le32_to_cpu(exfat->bs->bsx.clu_count),
-			le32_to_cpu(exfat->bs->bsx.clu_count));
-	exfat_info("Cluster heap offset: %#x\n",
-			le32_to_cpu(exfat->bs->bsx.clu_offset));
+	exfat_info("sector size:  %s\n",
+		bytes_to_human_readable(1 << exfat->bs->bsx.sect_size_bits));
+	exfat_info("cluster size: %s\n",
+		bytes_to_human_readable(exfat->clus_size));
+	exfat_info("volume size:  %s\n",
+		bytes_to_human_readable(exfat->blk_dev->size));
 
 	printf("%s: %s. directories %ld, files %ld\n", dev_name,
 			errors ? "checking stopped" : "clean",
