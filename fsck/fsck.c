@@ -931,7 +931,6 @@ static int read_file(struct exfat_de_iter *de_iter,
 		return -EINVAL;
 	}
 
-	node->dentry_file_offset = exfat_de_iter_file_offset(de_iter);
 	*new_node = node;
 	return ret;
 }
