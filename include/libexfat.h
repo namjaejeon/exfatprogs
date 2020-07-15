@@ -28,6 +28,8 @@
 
 #define EXFAT_MAX_NUM_CLUSTER		(0xFFFFFFF5)
 
+#define DEFAULT_BOUNDARY_ALIGNMENT	(1024*1024)
+
 #define DEFAULT_SECTOR_SIZE	(512)
 
 #define VOLUME_LABEL_BUFFER_SIZE	(VOLUME_LABEL_MAX_LEN*MB_LEN_MAX+1)
@@ -59,6 +61,7 @@ struct exfat_user_input {
 	bool writeable;
 	unsigned int cluster_size;
 	unsigned int sec_per_clu;
+	unsigned int boundary_align;
 	bool quick;
 	__u16 volume_label[VOLUME_LABEL_MAX_LEN];
 	int volume_label_len;
