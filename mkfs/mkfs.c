@@ -604,7 +604,11 @@ int main(int argc, char *argv[])
 			ret = parse_cluster_size(optarg);
 			if (ret < 0)
 				goto out;
-			else if (ret > EXFAT_MAX_CLUSTER_SIZE) {
+			else if (ret & (ret - 1)) {
+				exfat_err("cluster size(%d) is not a power of 2)\n",
+					ret);
+				goto out;
+			} else if (ret > EXFAT_MAX_CLUSTER_SIZE) {
 				exfat_err("cluster size(%d) exceeds max cluster size(%d)\n",
 					ui.cluster_size, EXFAT_MAX_CLUSTER_SIZE);
 				goto out;
