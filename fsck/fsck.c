@@ -811,9 +811,13 @@ static int check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 	}
 
 	if (node->size == 0 && node->is_contiguous) {
-		fsck_err(iter->parent, node,
-			"empty, but marked as contiguous\n");
-		ret = -EINVAL;
+		if (repair_file_ask(iter, node, ER_FILE_ZERO_NOFAT,
+				"empty, but has no Fat chain\n")) {
+			exfat_de_iter_get_dirty(iter, 1, &dentry);
+			dentry->stream_flags &= ~EXFAT_SF_CONTIGUOUS;
+			ret = 1;
+		} else
+			ret = -EINVAL;
 	}
 
 	if ((node->attr & ATTR_SUBDIR) &&
