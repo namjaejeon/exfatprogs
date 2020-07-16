@@ -430,6 +430,7 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
 	int clu_len;
+
 	if (ui->boundary_align < bd->sector_size) {
 		exfat_err("boundary alignment is too small (min %d)\n",
 				bd->sector_size);
