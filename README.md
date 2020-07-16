@@ -42,7 +42,7 @@ Usage example:
         mkfs.exfat -f /dev/sda1
     4. For set volume label, use -l option with string user want.
         mkfs.exfat -L "my usb" /dev/sda1
-    5. To change boundary alignement(KB or MB or Byte) user want
+    5. To change boundary alignment(KB or MB or Byte) user want
         mkfs.exfat -b 16777216 /dev/sda1
         mkfs.exfat -b 16384K /dev/sda1
         mkfs.exfat -b 16M /dev/sda1

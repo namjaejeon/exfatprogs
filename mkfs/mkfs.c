@@ -405,7 +405,7 @@ static void usage(void)
 	fprintf(stderr, "Usage: mkfs.exfat\n");
 	fprintf(stderr, "\t-L | --volume-label=label                              Set volume label\n");
 	fprintf(stderr, "\t-c | --cluster-size=size(or suffixed by 'K' or 'M')    Specify cluster size\n");
-	fprintf(stderr, "\t-b | --boundary-align=size(or suffixed by 'K' or 'M')  Specify boundary alignement\n");
+	fprintf(stderr, "\t-b | --boundary-align=size(or suffixed by 'K' or 'M')  Specify boundary alignment\n");
 	fprintf(stderr, "\t-f | --full-format                                     Full format\n");
 	fprintf(stderr, "\t-V | --version                                         Show version\n");
 	fprintf(stderr, "\t-v | --verbose                                         Print debug\n");
@@ -430,8 +430,9 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
 	int clu_len;
+
 	if (ui->boundary_align < bd->sector_size) {
-		exfat_err("boundary alignement is too small (min %d)\n",
+		exfat_err("boundary alignment is too small (min %d)\n",
 				bd->sector_size);
 		return -1;
 	}
@@ -442,7 +443,7 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	finfo.clu_byte_off = round_up(finfo.fat_byte_off + finfo.fat_byte_len,
 		ui->boundary_align);
 	if (bd->size <= finfo.clu_byte_off) {
-		exfat_err("boundary alignement is too big\n");
+		exfat_err("boundary alignment is too big\n");
 		return -1;
 	}
 	finfo.total_clu_cnt = (bd->size - finfo.clu_byte_off) /
