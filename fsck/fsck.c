@@ -1409,7 +1409,7 @@ static void exfat_show_info(struct exfat *exfat, const char *dev_name,
 			errors ? "checking stopped" : "clean",
 			exfat_stat.dir_count, exfat_stat.file_count);
 	if (errors || exfat->dirty)
-		printf("%s: errors %ld, fixed %ld\n", dev_name,
+		printf("%s: files corrupted %ld, files fixed %ld\n", dev_name,
 			exfat_stat.error_count, exfat_stat.fixed_count);
 }
 
