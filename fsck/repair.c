@@ -41,7 +41,7 @@ static struct exfat_repair_problem problems[] = {
 	{ER_FILE_SMALLER_SIZE, ERF_DEFAULT_NO, ERP_TRUNCATE},
 	{ER_FILE_LARGER_SIZE, ERF_DEFAULT_NO, ERP_TRUNCATE},
 	{ER_FILE_DUPLICATED_CLUS, ERF_DEFAULT_NO, ERP_TRUNCATE},
-	{ER_FILE_ZERO_NOFAT, ERF_DEFAULT_NO, ERP_FIX},
+	{ER_FILE_ZERO_NOFAT, ERF_DEFAULT_YES | ERF_PREEN_YES, ERP_FIX},
 };
 
 static struct exfat_repair_problem *find_problem(er_problem_code_t prcode)

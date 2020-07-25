@@ -1090,10 +1090,7 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 	struct exfat_inode *node = NULL;
 	struct exfat_dentry *dentry;
 	int dentry_count;
-	struct list_head sub_dir_list;
 	struct exfat_de_iter *de_iter;
-
-	INIT_LIST_HEAD(&sub_dir_list);
 
 	de_iter = &exfat->de_iter;
 	ret = exfat_de_iter_init(de_iter, exfat, dir);
@@ -1128,7 +1125,7 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 			if ((node->attr & ATTR_SUBDIR) && node->size) {
 				node->parent = dir;
 				list_add_tail(&node->sibling, &dir->children);
-				list_add_tail(&node->list, &sub_dir_list);
+				list_add_tail(&node->list, &exfat->dir_list);
 			} else
 				free_exfat_inode(node);
 			break;
@@ -1168,7 +1165,6 @@ static int read_children(struct exfat *exfat, struct exfat_inode *dir)
 		exfat_de_iter_advance(de_iter, dentry_count);
 	}
 out:
-	list_splice(&sub_dir_list, &exfat->dir_list);
 	exfat_de_iter_flush(de_iter);
 	return 0;
 err:
@@ -1413,7 +1409,7 @@ static void exfat_show_info(struct exfat *exfat, const char *dev_name,
 			errors ? "checking stopped" : "clean",
 			exfat_stat.dir_count, exfat_stat.file_count);
 	if (errors || exfat->dirty)
-		printf("%s: errors %ld, fixed %ld\n", dev_name,
+		printf("%s: files corrupted %ld, files fixed %ld\n", dev_name,
 			exfat_stat.error_count, exfat_stat.fixed_count);
 }
 
