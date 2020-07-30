@@ -471,6 +471,18 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 				return -EINVAL;
 		}
 
+		if (!EXFAT_BITMAP_GET(exfat->disk_bitmap,
+				clus - EXFAT_FIRST_CLUSTER)) {
+			if (repair_file_ask(&exfat->de_iter, node,
+					ER_FILE_INVALID_CLUS,
+					"cluster is marked as free. truncate to %" PRIu64 " bytes",
+					count * exfat->clus_size))
+				goto truncate_file;
+
+			else
+				return -EINVAL;
+		}
+
 		/* This cluster is allocated or not */
 		if (get_next_clus(exfat, node, clus, &next))
 			goto truncate_file;
@@ -480,20 +492,6 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 				if (repair_file_ask(&exfat->de_iter, node,
 						ER_FILE_INVALID_CLUS,
 						"broken cluster chain. "
-						"truncate to %"
-						PRIu64 " bytes",
-						count * exfat->clus_size))
-					goto truncate_file;
-
-				else
-					return -EINVAL;
-			}
-		} else {
-			if (!EXFAT_BITMAP_GET(exfat->disk_bitmap,
-					clus - EXFAT_FIRST_CLUSTER)) {
-				if (repair_file_ask(&exfat->de_iter, node,
-						ER_FILE_INVALID_CLUS,
-						"cluster is marked as free. "
 						"truncate to %"
 						PRIu64 " bytes",
 						count * exfat->clus_size))
