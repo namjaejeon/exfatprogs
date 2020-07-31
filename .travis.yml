@@ -8,10 +8,15 @@ notifications:
 before_script:
  - sudo apt-get install linux-headers-$(uname -r)
  - git clone --branch=exfat-next https://github.com/namjaejeon/exfat_oot
+ - ./.travis_get_mainline_kernel
  - export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
  - export PATH=/usr/local/lib:$PATH
 
 script:
+ # run checkpatch.pl
+ - git format-patch -20
+ - ./linux/scripts/checkpatch.pl *.patch || true
+ # build & install exfatprogs
  - ./autogen.sh > /dev/null
  - ./configure > /dev/null
  - make -j$((`nproc`+1)) > /dev/null

@@ -1,3 +1,21 @@
+exfatprogs 1.0.4 - released 2020-07-31
+======================================
+
+CHANGES :
+ * fsck.exfat: display sector, cluster, and volume sizes in the human
+   readable format.
+ * fsck.exfat: reduce the elapsed time using read-ahead.
+
+NEW FEATURES :
+ * mkfs.exfat: generate pseudo unique serials while creating filesystems.
+ * mkfs.exfat: add the "-b" option to align the start offset of FAT and
+   data clusters.
+ * fsck.exfat: repair zero-byte files which have the NoFatChain attribute.
+
+BUG FIXES :
+ * Fix memory leaks on error handling paths.
+ * fsck.exfat: fix the bug that cannot access space beyond 2TB.
+
 exfatprogs 1.0.3 - released 2020-05-12
 ======================================
 

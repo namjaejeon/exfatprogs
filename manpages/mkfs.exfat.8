@@ -4,6 +4,9 @@ mkfs.exfat \- create an exFAT filesystem
 .SH SYNOPSIS
 .B mkfs.exfat
 [
+.B \-b
+.I boundary_alignment
+] [
 .B \-c
 .I cluster_size
 ] [
@@ -35,6 +38,12 @@ SCSI disk, use:
 .B mkfs.exfat /dev/sda1
 .PP
 .SH OPTIONS
+.TP
+.BI \-b " boundary_alignment"
+Specify the alignment for FAT and start of cluster.
+Boundary alignment can be specified in m/M for megabytes
+and k/K for kilobytes. It should be a power of two.
+Some media like sdcard need this.
 .TP
 .BI \-c " cluster_size"
 Specify the cluster size. Cluster size can be specified in m/M for megabytes
