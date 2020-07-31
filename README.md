@@ -65,6 +65,23 @@ Usage example:
         tune.exfat -L "new label" /dev/sda1
 ```
 
+## Benchmarks
+
+Some fsck implementations were tested and compared for Samsung 64GB Pro
+microSDXC UHS-I Class 10 which was filled up to 35GB with 9948 directories
+and 16506 files by fsstress.
+
+The difference in the execution time for each testing is very small.
+
+
+| Implementation       | version         | execution time (seconds) |
+|----------------------|-----------------|--------------------------|
+| **exfatprogs fsck**  | 1.0.4           | 11.561                   |
+| Windows fsck         | Windows 10 1809 | 11.449                   |
+| [exfat-fuse fsck]    | 1.3.0           | 68.977                   |
+
+[exfat-fuse fsck]: https://github.com/relan/exfat
+
 ## Sending feedback
 If you have any issues, please create [issues][1] or contact to [Namjae Jeon](mailto:linkinjeon@kernel.org) and
 [Hyunchul Lee](mailto:hyc.lee@gmail.com).
