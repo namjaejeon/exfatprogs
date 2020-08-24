@@ -204,20 +204,11 @@ static void free_exfat(struct exfat *exfat)
 	}
 }
 
-static struct exfat *alloc_exfat(struct exfat_blk_dev *bd, struct pbr *bs)
+static int init_exfat(struct exfat *exfat, struct pbr *bs)
 {
-	struct exfat *exfat;
 	int i;
 
-	exfat = (struct exfat *)calloc(1, sizeof(*exfat));
-	if (!exfat) {
-		free(bs);
-		exfat_err("failed to allocate exfat\n");
-		return NULL;
-	}
-
 	INIT_LIST_HEAD(&exfat->dir_list);
-	exfat->blk_dev = bd;
 	exfat->bs = bs;
 	exfat->clus_count = le32_to_cpu(bs->bsx.clu_count);
 	exfat->clus_size = EXFAT_CLUSTER_SIZE(bs);
@@ -250,10 +241,10 @@ static struct exfat *alloc_exfat(struct exfat_blk_dev *bd, struct pbr *bs)
 		if (!exfat->buffer_desc[i].dirty)
 			goto err;
 	}
-	return exfat;
+	return 0;
 err:
 	free_exfat(exfat);
-	return NULL;
+	return -ENOMEM;
 }
 
 static void exfat_free_dir_list(struct exfat *exfat)
@@ -592,33 +583,33 @@ off_t exfat_c2o(struct exfat *exfat, unsigned int clus)
 				 exfat->bs->bsx.sect_per_clus_bits));
 }
 
-static int boot_region_checksum(struct exfat *exfat)
+static int boot_region_checksum(struct exfat_blk_dev *bd, int bs_offset)
 {
 	void *sect;
 	unsigned int i;
 	uint32_t checksum;
 	int ret = 0;
-	unsigned short size;
+	unsigned int size;
 
-	size = EXFAT_SECTOR_SIZE(exfat->bs);
+	size = bd->sector_size;
 	sect = malloc(size);
 	if (!sect)
 		return -ENOMEM;
 
 	checksum = 0;
-
-	boot_calc_checksum((unsigned char *)exfat->bs, size, true, &checksum);
-	for (i = 1; i < 11; i++) {
-		if (exfat_read(exfat->blk_dev->dev_fd, sect, size, i * size) !=
+	for (i = 0; i < 11; i++) {
+		if (exfat_read(bd->dev_fd, sect, size,
+				bs_offset * size + i * size) !=
 				(ssize_t)size) {
-			exfat_err("failed to read boot regions\n");
+			exfat_err("failed to read boot region\n");
 			ret = -EIO;
 			goto out;
 		}
-		boot_calc_checksum(sect, size, false, &checksum);
+		boot_calc_checksum(sect, size, i == 0, &checksum);
 	}
 
-	if (exfat_read(exfat->blk_dev->dev_fd, sect, size, 11 * size) !=
+	if (exfat_read(bd->dev_fd, sect, size,
+			bs_offset * size + 11 * size) !=
 			(ssize_t)size) {
 		exfat_err("failed to read a boot checksum sector\n");
 		ret = -EIO;
@@ -627,33 +618,15 @@ static int boot_region_checksum(struct exfat *exfat)
 
 	for (i = 0; i < size/sizeof(checksum); i++) {
 		if (le32_to_cpu(((__le32 *)sect)[i]) != checksum) {
-			if (exfat_repair_ask(exfat, ER_BS_CHECKSUM,
-				"checksums of boot sector are not correct. "
-				"%#x, but expected %#x",
-				le32_to_cpu(((__le32 *)sect)[i]), checksum)) {
-				goto out_write;
-			} else {
-				ret = -EINVAL;
-				goto out;
-			}
+			exfat_err("checksum of boot region is not correct. %#x, but expected %#x\n",
+				le32_to_cpu(((__le32 *)sect)[i]), checksum);
+			ret = -EINVAL;
+			goto out;
 		}
 	}
 out:
 	free(sect);
 	return ret;
-
-out_write:
-	for (i = 0; i < size/sizeof(checksum); i++)
-		((__le32 *)sect)[i] = cpu_to_le32(checksum);
-
-	if (exfat_write(exfat->blk_dev->dev_fd,
-			sect, size, size * 11) != size) {
-		exfat_err("failed to write checksum sector\n");
-		free(sect);
-		return -EIO;
-	}
-	free(sect);
-	return 0;
 }
 
 static int exfat_mark_volume_dirty(struct exfat *exfat, bool dirty)
@@ -683,18 +656,21 @@ static int exfat_mark_volume_dirty(struct exfat *exfat, bool dirty)
 	return 0;
 }
 
-static int read_boot_region(struct exfat_blk_dev *bd, struct pbr **pbr)
+static int read_boot_region(struct exfat_blk_dev *bd, struct pbr **pbr,
+		int bs_offset)
 {
 	struct pbr *bs;
+	int ret = -EINVAL;
 
+	*pbr = NULL;
 	bs = (struct pbr *)malloc(sizeof(struct pbr));
 	if (!bs) {
 		exfat_err("failed to allocate memory\n");
 		return -ENOMEM;
 	}
 
-	if (exfat_read(bd->dev_fd, bs, sizeof(*bs), 0) !=
-			(ssize_t)sizeof(*bs)) {
+	if (exfat_read(bd->dev_fd, bs, sizeof(*bs),
+			bs_offset * bd->sector_size) != (ssize_t)sizeof(*bs)) {
 		exfat_err("failed to read a boot sector\n");
 		free(bs);
 		return -EIO;
@@ -704,6 +680,10 @@ static int read_boot_region(struct exfat_blk_dev *bd, struct pbr **pbr)
 		exfat_err("failed to find exfat file system.\n");
 		goto err;
 	}
+
+	ret = boot_region_checksum(bd, bs_offset);
+	if (ret < 0)
+		goto err;
 
 	if (EXFAT_SECTOR_SIZE(bs) < 512 || EXFAT_SECTOR_SIZE(bs) > 4 * KB) {
 		exfat_err("too small or big sector size: %d\n",
@@ -747,7 +727,61 @@ static int read_boot_region(struct exfat_blk_dev *bd, struct pbr **pbr)
 	return 0;
 err:
 	free(bs);
-	return -EINVAL;
+	return ret;
+}
+
+static int restore_boot_region(struct exfat_blk_dev *bd)
+{
+	int i;
+	char *sector;
+
+	sector = malloc(bd->sector_size);
+	if (!sector)
+		return -ENOMEM;
+
+	for (i = 0; i < 12; i++) {
+		if (exfat_read(bd->dev_fd, sector, bd->sector_size,
+				BACKUP_BOOT_SEC_IDX * bd->sector_size +
+				i * bd->sector_size) !=
+				(ssize_t)bd->sector_size)
+			return -EIO;
+		if (i == 0)
+			((struct pbr *)sector)->bsx.perc_in_use = 0xff;
+
+		if (exfat_write(bd->dev_fd, sector, bd->sector_size,
+				BOOT_SEC_IDX * bd->sector_size +
+				i * bd->sector_size) !=
+				(ssize_t)bd->sector_size)
+			return -EIO;
+	}
+	if (fsync(bd->dev_fd))
+		return -EIO;
+	free(sector);
+	return 0;
+}
+
+static int exfat_boot_region_check(struct exfat *exfat, struct pbr **bs)
+{
+	int ret;
+
+	ret = read_boot_region(exfat->blk_dev, bs, BOOT_SEC_IDX);
+	if (ret == -EINVAL && exfat_repair_ask(exfat, ER_BS_BOOT_REGION,
+				"boot region is corrupted. try to restore the region from backup"
+				)) {
+		ret = read_boot_region(exfat->blk_dev, bs, BACKUP_BOOT_SEC_IDX);
+		if (ret < 0) {
+			exfat_err("backup boot region is also corrupted");
+			return ret;
+		}
+		ret = restore_boot_region(exfat->blk_dev);
+		if (ret < 0) {
+			exfat_err("failed to restore boot region from backup");
+			free(*bs);
+			*bs = NULL;
+			return ret;
+		}
+	}
+	return ret;
 }
 
 static void dentry_calc_checksum(struct exfat_dentry *dentry,
@@ -1485,25 +1519,27 @@ int main(int argc, char * const argv[])
 		return FSCK_EXIT_OPERATION_ERROR;
 	}
 
-	ret = read_boot_region(&bd, &bs);
-	if (ret)
-		goto err;
-
-	exfat = alloc_exfat(&bd, bs);
+	exfat = (struct exfat *)calloc(1, sizeof(*exfat));
 	if (!exfat) {
+		exfat_err("failed to allocate exfat\n");
 		ret = -ENOMEM;
 		goto err;
 	}
+	exfat->blk_dev = &bd;
 	exfat->options = ui.options;
+
+	ret = exfat_boot_region_check(exfat, &bs);
+	if (ret)
+		goto err;
+
+	ret = init_exfat(exfat, bs);
+	if (ret)
+		goto err;
 
 	if (exfat_mark_volume_dirty(exfat, true)) {
 		ret = -EIO;
 		goto err;
 	}
-
-	ret = boot_region_checksum(exfat);
-	if (ret)
-		goto err;
 
 	exfat_debug("verifying root directory...\n");
 	ret = exfat_root_dir_check(exfat);

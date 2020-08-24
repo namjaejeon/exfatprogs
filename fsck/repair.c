@@ -34,6 +34,7 @@ static const char *prompts[] = {
 
 static struct exfat_repair_problem problems[] = {
 	{ER_BS_CHECKSUM, ERF_PREEN_YES, ERP_FIX},
+	{ER_BS_BOOT_REGION, 0, ERP_FIX},
 	{ER_DE_CHECKSUM, ERF_PREEN_YES, ERP_FIX},
 	{ER_FILE_VALID_SIZE, ERF_PREEN_YES, ERP_FIX},
 	{ER_FILE_INVALID_CLUS, ERF_DEFAULT_NO, ERP_TRUNCATE},
