@@ -829,6 +829,7 @@ static int check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 	struct exfat_dentry *dentry;
 	int ret = 0;
 	uint16_t checksum;
+	bool valid = true;
 
 	ret = check_clus_chain(exfat, node);
 	if (ret < 0)
@@ -839,7 +840,7 @@ static int check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 		fsck_err(iter->parent, node,
 			"size %" PRIu64 " is greater than cluster heap\n",
 			node->size);
-		ret = -EINVAL;
+		valid = false;
 	}
 
 	if (node->size == 0 && node->is_contiguous) {
@@ -849,7 +850,7 @@ static int check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 			dentry->stream_flags &= ~EXFAT_SF_CONTIGUOUS;
 			ret = 1;
 		} else
-			ret = -EINVAL;
+			valid = false;
 	}
 
 	if ((node->attr & ATTR_SUBDIR) &&
@@ -857,7 +858,7 @@ static int check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 		fsck_err(iter->parent, node,
 			"directory size %" PRIu64 " is not divisible by %d\n",
 			node->size, exfat->clus_size);
-		ret = -EINVAL;
+		valid = false;
 	}
 
 	checksum = file_calc_checksum(iter);
@@ -869,10 +870,10 @@ static int check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 			dentry->file_checksum = cpu_to_le16(checksum);
 			ret = 1;
 		} else
-			ret = -EINVAL;
+			valid = false;
 	}
 
-	return ret;
+	return valid ? ret : -EINVAL;
 }
 
 static int read_file_dentries(struct exfat_de_iter *iter,
