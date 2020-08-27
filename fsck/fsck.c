@@ -771,12 +771,12 @@ static int exfat_boot_region_check(struct exfat *exfat, struct pbr **bs)
 				)) {
 		ret = read_boot_region(exfat->blk_dev, bs, BACKUP_BOOT_SEC_IDX);
 		if (ret < 0) {
-			exfat_err("backup boot region is also corrupted");
+			exfat_err("backup boot region is also corrupted\n");
 			return ret;
 		}
 		ret = restore_boot_region(exfat->blk_dev);
 		if (ret < 0) {
-			exfat_err("failed to restore boot region from backup");
+			exfat_err("failed to restore boot region from backup\n");
 			free(*bs);
 			*bs = NULL;
 			return ret;
