@@ -672,8 +672,8 @@ static int read_boot_region(struct exfat_blk_dev *bd, struct pbr **pbr,
 	if (exfat_read(bd->dev_fd, bs, sizeof(*bs),
 			bs_offset * bd->sector_size) != (ssize_t)sizeof(*bs)) {
 		exfat_err("failed to read a boot sector\n");
-		free(bs);
-		return -EIO;
+		ret = -EIO;
+		goto err;
 	}
 
 	if (memcmp(bs->bpb.oem_name, "EXFAT   ", 8) != 0) {
@@ -685,6 +685,7 @@ static int read_boot_region(struct exfat_blk_dev *bd, struct pbr **pbr,
 	if (ret < 0)
 		goto err;
 
+	ret = -EINVAL;
 	if (EXFAT_SECTOR_SIZE(bs) < 512 || EXFAT_SECTOR_SIZE(bs) > 4 * KB) {
 		exfat_err("too small or big sector size: %d\n",
 				EXFAT_SECTOR_SIZE(bs));
@@ -709,7 +710,7 @@ static int read_boot_region(struct exfat_blk_dev *bd, struct pbr **pbr,
 
 	if (le64_to_cpu(bs->bsx.vol_length) * EXFAT_SECTOR_SIZE(bs) >
 			bd->size) {
-		exfat_err("too large sector count: %" PRIu64 "\n, expected: %llu\n",
+		exfat_err("too large sector count: %" PRIu64 ", expected: %llu\n",
 				le64_to_cpu(bs->bsx.vol_length),
 				bd->num_sectors);
 		goto err;
@@ -770,12 +771,12 @@ static int exfat_boot_region_check(struct exfat *exfat, struct pbr **bs)
 				)) {
 		ret = read_boot_region(exfat->blk_dev, bs, BACKUP_BOOT_SEC_IDX);
 		if (ret < 0) {
-			exfat_err("backup boot region is also corrupted");
+			exfat_err("backup boot region is also corrupted\n");
 			return ret;
 		}
 		ret = restore_boot_region(exfat->blk_dev);
 		if (ret < 0) {
-			exfat_err("failed to restore boot region from backup");
+			exfat_err("failed to restore boot region from backup\n");
 			free(*bs);
 			*bs = NULL;
 			return ret;
