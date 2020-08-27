@@ -710,7 +710,7 @@ static int read_boot_region(struct exfat_blk_dev *bd, struct pbr **pbr,
 
 	if (le64_to_cpu(bs->bsx.vol_length) * EXFAT_SECTOR_SIZE(bs) >
 			bd->size) {
-		exfat_err("too large sector count: %" PRIu64 "\n, expected: %llu\n",
+		exfat_err("too large sector count: %" PRIu64 ", expected: %llu\n",
 				le64_to_cpu(bs->bsx.vol_length),
 				bd->num_sectors);
 		goto err;
