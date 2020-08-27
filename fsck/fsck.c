@@ -672,8 +672,8 @@ static int read_boot_region(struct exfat_blk_dev *bd, struct pbr **pbr,
 	if (exfat_read(bd->dev_fd, bs, sizeof(*bs),
 			bs_offset * bd->sector_size) != (ssize_t)sizeof(*bs)) {
 		exfat_err("failed to read a boot sector\n");
-		free(bs);
-		return -EIO;
+		ret = -EIO;
+		goto err;
 	}
 
 	if (memcmp(bs->bpb.oem_name, "EXFAT   ", 8) != 0) {
@@ -685,6 +685,7 @@ static int read_boot_region(struct exfat_blk_dev *bd, struct pbr **pbr,
 	if (ret < 0)
 		goto err;
 
+	ret = -EINVAL;
 	if (EXFAT_SECTOR_SIZE(bs) < 512 || EXFAT_SECTOR_SIZE(bs) > 4 * KB) {
 		exfat_err("too small or big sector size: %d\n",
 				EXFAT_SECTOR_SIZE(bs));
