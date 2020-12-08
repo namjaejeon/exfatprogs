@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- *   Copyright (C) 2019 Namjae Jeon <linkinjeon@kernel.org>
+ *   Copyright (C) 2020 Namjae Jeon <linkinjeon@kernel.org>
  */
 
 #include <stdio.h>
@@ -16,28 +16,19 @@
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: tune.exfat\n");
-	fprintf(stderr, "\t-l | --print-label                    Print volume label\n");
-	fprintf(stderr, "\t-L | --volume-label=label             Set volume label\n");
+	fprintf(stderr, "Usage: exfatlabel\n");
 	fprintf(stderr, "\t-V | --version                        Show version\n");
-	fprintf(stderr, "\t-v | --verbose                        Print debug\n");
 	fprintf(stderr, "\t-h | --help                           Show help\n");
 
 	exit(EXIT_FAILURE);
 }
 
 static struct option opts[] = {
-	{"print-label",		no_argument,		NULL,	'l' },
-	{"set-label",		required_argument,	NULL,	'L' },
 	{"version",		no_argument,		NULL,	'V' },
-	{"verbose",		no_argument,		NULL,	'v' },
 	{"help",		no_argument,		NULL,	'h' },
 	{"?",			no_argument,		NULL,	'?' },
 	{NULL,			0,			NULL,	 0  }
 };
-
-#define EXFAT_GET_LABEL	0x1
-#define EXFAT_SET_LABEL	0x2
 
 int main(int argc, char *argv[])
 {
@@ -46,8 +37,6 @@ int main(int argc, char *argv[])
 	struct exfat_blk_dev bd;
 	struct exfat_user_input ui;
 	bool version_only = false;
-	int flags = 0;
-	char label_input[VOLUME_LABEL_BUFFER_SIZE];
 	off_t root_clu_off;
 
 	init_user_input(&ui);
@@ -56,21 +45,10 @@ int main(int argc, char *argv[])
 		exfat_err("failed to init locale/codeset\n");
 
 	opterr = 0;
-	while ((c = getopt_long(argc, argv, "L:lVvh", opts, NULL)) != EOF)
+	while ((c = getopt_long(argc, argv, "Vh", opts, NULL)) != EOF)
 		switch (c) {
-		case 'l':
-			flags = EXFAT_GET_LABEL;
-			break;
-		case 'L':
-			snprintf(label_input, sizeof(label_input), "%s",
-					optarg);
-			flags = EXFAT_SET_LABEL;
-			break;
 		case 'V':
 			version_only = true;
-			break;
-		case 'v':
-			print_level = EXFAT_DEBUG;
 			break;
 		case '?':
 		case 'h':
@@ -82,11 +60,11 @@ int main(int argc, char *argv[])
 	if (version_only)
 		exit(EXIT_FAILURE);
 
-	if (argc < 3)
+	if (argc < 2)
 		usage();
 
 	memset(ui.dev_name, 0, sizeof(ui.dev_name));
-	snprintf(ui.dev_name, sizeof(ui.dev_name), "%s", argv[argc - 1]);
+	snprintf(ui.dev_name, sizeof(ui.dev_name), "%s", argv[1]);
 
 	ret = exfat_get_blk_dev_info(&ui, &bd);
 	if (ret < 0)
@@ -96,10 +74,10 @@ int main(int argc, char *argv[])
 	if (root_clu_off < 0)
 		goto out;
 
-	if (flags == EXFAT_GET_LABEL)
+	if (argc == 2)
 		ret = exfat_get_volume_label(&bd, root_clu_off);
-	else if (flags == EXFAT_SET_LABEL)
-		ret = exfat_set_volume_label(&bd, label_input, root_clu_off);
+	else
+		ret = exfat_set_volume_label(&bd, argv[2], root_clu_off);
 
 out:
 	return ret;

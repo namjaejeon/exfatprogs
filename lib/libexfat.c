@@ -327,3 +327,95 @@ ssize_t exfat_utf16_dec(const __u16 *in_str, size_t in_len,
 
 	return out_len-1;
 }
+
+off_t exfat_get_root_entry_offset(struct exfat_blk_dev *bd)
+{
+	struct pbr *bs;
+	int nbytes;
+	unsigned int cluster_size;
+	off_t root_clu_off;
+
+	bs = (struct pbr *)malloc(sizeof(struct pbr));
+	if (!bs) {
+		exfat_err("failed to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	nbytes = exfat_read(bd->dev_fd, bs, sizeof(struct pbr), 0);
+	if (nbytes != sizeof(struct pbr)) {
+		exfat_err("boot sector read failed: %d\n", errno);
+		return -1;
+	}
+
+	cluster_size = (1 << bs->bsx.sect_per_clus_bits) * bd->sector_size;
+	root_clu_off = le32_to_cpu(bs->bsx.clu_offset) * bd->sector_size +
+		le32_to_cpu(bs->bsx.root_cluster - EXFAT_REVERVED_CLUSTERS)
+		* cluster_size;
+	free(bs);
+
+	return root_clu_off;
+}
+
+int exfat_get_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
+{
+	struct exfat_dentry *vol_entry;
+	char volume_label[VOLUME_LABEL_BUFFER_SIZE];
+	__le16 disk_label[VOLUME_LABEL_MAX_LEN];
+	int nbytes;
+
+	vol_entry = malloc(sizeof(struct exfat_dentry));
+	if (!vol_entry) {
+		exfat_err("failed to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	nbytes = exfat_read(bd->dev_fd, vol_entry,
+		sizeof(struct exfat_dentry), root_clu_off);
+	if (nbytes != sizeof(struct exfat_dentry)) {
+		exfat_err("volume entry read failed: %d\n", errno);
+		return -1;
+	}
+
+	memcpy(disk_label, vol_entry->vol_label, sizeof(disk_label));
+	memset(volume_label, 0, sizeof(volume_label));
+	if (exfat_utf16_dec(disk_label, vol_entry->vol_char_cnt*2,
+		volume_label, sizeof(volume_label)) < 0) {
+		exfat_err("failed to decode volume label\n");
+		return -1;
+	}
+
+	exfat_info("label: %s\n", volume_label);
+	return 0;
+}
+
+int exfat_set_volume_label(struct exfat_blk_dev *bd,
+		char *label_input, off_t root_clu_off)
+{
+	struct exfat_dentry vol;
+	int nbytes;
+	__u16 volume_label[VOLUME_LABEL_MAX_LEN];
+	int volume_label_len;
+
+	volume_label_len = exfat_utf16_enc(label_input,
+			volume_label, sizeof(volume_label));
+	if (volume_label_len < 0) {
+		exfat_err("failed to encode volume label\n");
+		return -1;
+	}
+
+	vol.type = EXFAT_VOLUME;
+	memset(vol.vol_label, 0, sizeof(vol.vol_label));
+	memcpy(vol.vol_label, volume_label, volume_label_len);
+	vol.vol_char_cnt = volume_label_len/2;
+
+	nbytes = exfat_write(bd->dev_fd, &vol, sizeof(struct exfat_dentry),
+			root_clu_off);
+	if (nbytes != sizeof(struct exfat_dentry)) {
+		exfat_err("volume entry write failed: %d\n", errno);
+		return -1;
+	}
+	fsync(bd->dev_fd);
+
+	exfat_info("new label: %s\n", label_input);
+	return 0;
+}

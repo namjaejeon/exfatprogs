@@ -2,7 +2,7 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = lib mkfs fsck tune
+SUBDIRS = lib mkfs fsck tune label
 
 # manpages
 dist_man8_MANS =		\
@@ -18,4 +18,5 @@ EXTRA_DIST =			\
 	mkfs/Android.bp		\
 	tune/Android.bp		\
 	fsck/Android.bp		\
+	label/Android.bp	\
 	README.md

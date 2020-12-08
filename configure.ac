@@ -30,6 +30,7 @@ AC_CONFIG_FILES([
 	mkfs/Makefile
 	fsck/Makefile
 	tune/Makefile
+	label/Makefile
 ])
 
 AC_OUTPUT
