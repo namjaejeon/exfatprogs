@@ -63,6 +63,15 @@ Usage example:
         tune.exfat -l /dev/sda1
     2. set new volume label.
         tune.exfat -L "new label" /dev/sda1
+
+- exfatlabel:
+    Get or Set volume label
+
+Usage example:
+    1. get current volume label.
+        exfatlabel /dev/sda1
+    2. set new volume label.
+        exfatlabel "new label" /dev/sda1
 ```
 
 ## Benchmarks
