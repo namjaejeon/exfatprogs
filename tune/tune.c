@@ -114,7 +114,7 @@ int main(int argc, char *argv[])
 		goto out;
 
 	if (flags == EXFAT_GET_VOLUME_LABEL)
-		ret = exfat_get_volume_label(&bd, root_clu_off);
+		ret = exfat_show_volume_label(&bd, root_clu_off);
 	else if (flags == EXFAT_SET_VOLUME_LABEL)
 		ret = exfat_set_volume_label(&bd, label_input, root_clu_off);
 

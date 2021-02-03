@@ -94,7 +94,7 @@ ssize_t exfat_utf16_enc(const char *in_str, __u16 *out_str, size_t out_size);
 ssize_t exfat_utf16_dec(const __u16 *in_str, size_t in_len,
 			char *out_str, size_t out_size);
 off_t exfat_get_root_entry_offset(struct exfat_blk_dev *bd);
-int exfat_get_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off);
+int exfat_show_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off);
 int exfat_set_volume_label(struct exfat_blk_dev *bd,
 		char *label_input, off_t root_clu_off);
 int exfat_read_sector(struct exfat_blk_dev *bd, void *buf,

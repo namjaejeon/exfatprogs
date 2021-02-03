@@ -356,7 +356,7 @@ off_t exfat_get_root_entry_offset(struct exfat_blk_dev *bd)
 	return root_clu_off;
 }
 
-int exfat_get_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
+int exfat_show_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
 {
 	struct exfat_dentry *vol_entry;
 	char volume_label[VOLUME_LABEL_BUFFER_SIZE];
