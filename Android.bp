@@ -8,6 +8,7 @@ cc_library_headers {
         "fsck",
         "tune",
         "label",
+        "dump",
     ],
 }
 

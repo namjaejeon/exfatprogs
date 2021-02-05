@@ -60,6 +60,7 @@ struct exfat_blk_dev {
 	unsigned int sector_size_bits;
 	unsigned long long num_sectors;
 	unsigned int num_clusters;
+	unsigned int cluster_size;
 };
 
 struct exfat_user_input {
@@ -103,10 +104,14 @@ int exfat_write_sector(struct exfat_blk_dev *bd, void *buf,
 		unsigned int sec_off);
 int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
 		unsigned int checksum, bool is_backup);
+char *exfat_conv_volume_serial(struct exfat_dentry *vol_entry);
 int exfat_show_volume_serial(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui);
 int exfat_set_volume_serial(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui);
+unsigned int exfat_calc_cluster_offset(struct exfat_blk_dev *bd,
+		unsigned int clu_off, unsigned int clu);
+
 
 /*
  * Exfat Print
