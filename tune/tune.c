@@ -103,21 +103,22 @@ int main(int argc, char *argv[])
 	/* Mode to change or display volume serial */
 	if (flags == EXFAT_GET_VOLUME_SERIAL) {
 		ret = exfat_show_volume_serial(&bd, &ui);
-		goto out;
+		goto close_fd_out;
 	} else if (flags == EXFAT_SET_VOLUME_SERIAL) {
 		ret = exfat_set_volume_serial(&bd, &ui);
-		goto out;
+		goto close_fd_out;
 	}
 
 	root_clu_off = exfat_get_root_entry_offset(&bd);
 	if (root_clu_off < 0)
-		goto out;
+		goto close_fd_out;
 
 	if (flags == EXFAT_GET_VOLUME_LABEL)
 		ret = exfat_show_volume_label(&bd, root_clu_off);
 	else if (flags == EXFAT_SET_VOLUME_LABEL)
 		ret = exfat_set_volume_label(&bd, label_input, root_clu_off);
-
+close_fd_out:
+	close(bd.dev_fd);
 out:
 	return ret;
 }

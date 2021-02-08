@@ -6,6 +6,9 @@ cc_library_headers {
         "include",
         "mkfs",
         "fsck",
+        "tune",
+        "label",
+        "dump",
     ],
 }
 
