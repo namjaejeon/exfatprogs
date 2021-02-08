@@ -81,6 +81,12 @@ Usage example:
     4. set new volume serial.
         exfatlabel -i /dev/sda1 "new serial"
 
+- dump.exfat:
+    Show on-disk information
+
+Usage example:
+    dump.exfat /dev/sda1
+
 ```
 
 ## Benchmarks

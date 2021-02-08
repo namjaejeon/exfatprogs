@@ -356,11 +356,30 @@ off_t exfat_get_root_entry_offset(struct exfat_blk_dev *bd)
 	return root_clu_off;
 }
 
+char *exfat_conv_volume_serial(struct exfat_dentry *vol_entry)
+{
+	char *volume_label;
+	__le16 disk_label[VOLUME_LABEL_MAX_LEN];
+
+	volume_label = malloc(VOLUME_LABEL_BUFFER_SIZE);
+	if (!volume_label)
+		return NULL;
+
+	memcpy(disk_label, vol_entry->vol_label, sizeof(disk_label));
+	memset(volume_label, 0, VOLUME_LABEL_BUFFER_SIZE);
+	if (exfat_utf16_dec(disk_label, vol_entry->vol_char_cnt*2,
+		volume_label, VOLUME_LABEL_BUFFER_SIZE) < 0) {
+		exfat_err("failed to decode volume label\n");
+		return NULL;
+	}
+
+	return volume_label;
+}
+
 int exfat_show_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
 {
 	struct exfat_dentry *vol_entry;
-	char volume_label[VOLUME_LABEL_BUFFER_SIZE];
-	__le16 disk_label[VOLUME_LABEL_MAX_LEN];
+	char *volume_label;
 	int nbytes;
 
 	vol_entry = malloc(sizeof(struct exfat_dentry));
@@ -376,15 +395,13 @@ int exfat_show_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
 		return -1;
 	}
 
-	memcpy(disk_label, vol_entry->vol_label, sizeof(disk_label));
-	memset(volume_label, 0, sizeof(volume_label));
-	if (exfat_utf16_dec(disk_label, vol_entry->vol_char_cnt*2,
-		volume_label, sizeof(volume_label)) < 0) {
-		exfat_err("failed to decode volume label\n");
-		return -1;
-	}
+	volume_label = exfat_conv_volume_serial(vol_entry);
+	if (!volume_label)
+		return -EINVAL;
 
 	exfat_info("label: %s\n", volume_label);
+
+	free(volume_label);
 	return 0;
 }
 
@@ -603,4 +620,11 @@ free_ppbr:
 	exfat_info("New volume serial : 0x%x\n", ui->volume_serial);
 
 	return ret;
+}
+
+unsigned int exfat_clus_to_blk_dev_off(struct exfat_blk_dev *bd,
+		unsigned int clu_off_sectnr, unsigned int clu)
+{
+	return clu_off_sectnr * bd->sector_size +
+		(clu - EXFAT_REVERVED_CLUSTERS) * bd->cluster_size;
 }
