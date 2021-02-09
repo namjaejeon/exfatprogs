@@ -327,3 +327,304 @@ ssize_t exfat_utf16_dec(const __u16 *in_str, size_t in_len,
 
 	return out_len-1;
 }
+
+off_t exfat_get_root_entry_offset(struct exfat_blk_dev *bd)
+{
+	struct pbr *bs;
+	int nbytes;
+	unsigned int cluster_size;
+	off_t root_clu_off;
+
+	bs = (struct pbr *)malloc(sizeof(struct pbr));
+	if (!bs) {
+		exfat_err("failed to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	nbytes = exfat_read(bd->dev_fd, bs, sizeof(struct pbr), 0);
+	if (nbytes != sizeof(struct pbr)) {
+		exfat_err("boot sector read failed: %d\n", errno);
+		return -1;
+	}
+
+	cluster_size = (1 << bs->bsx.sect_per_clus_bits) * bd->sector_size;
+	root_clu_off = le32_to_cpu(bs->bsx.clu_offset) * bd->sector_size +
+		le32_to_cpu(bs->bsx.root_cluster - EXFAT_REVERVED_CLUSTERS)
+		* cluster_size;
+	free(bs);
+
+	return root_clu_off;
+}
+
+char *exfat_conv_volume_serial(struct exfat_dentry *vol_entry)
+{
+	char *volume_label;
+	__le16 disk_label[VOLUME_LABEL_MAX_LEN];
+
+	volume_label = malloc(VOLUME_LABEL_BUFFER_SIZE);
+	if (!volume_label)
+		return NULL;
+
+	memcpy(disk_label, vol_entry->vol_label, sizeof(disk_label));
+	memset(volume_label, 0, VOLUME_LABEL_BUFFER_SIZE);
+	if (exfat_utf16_dec(disk_label, vol_entry->vol_char_cnt*2,
+		volume_label, VOLUME_LABEL_BUFFER_SIZE) < 0) {
+		exfat_err("failed to decode volume label\n");
+		return NULL;
+	}
+
+	return volume_label;
+}
+
+int exfat_show_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
+{
+	struct exfat_dentry *vol_entry;
+	char *volume_label;
+	int nbytes;
+
+	vol_entry = malloc(sizeof(struct exfat_dentry));
+	if (!vol_entry) {
+		exfat_err("failed to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	nbytes = exfat_read(bd->dev_fd, vol_entry,
+		sizeof(struct exfat_dentry), root_clu_off);
+	if (nbytes != sizeof(struct exfat_dentry)) {
+		exfat_err("volume entry read failed: %d\n", errno);
+		return -1;
+	}
+
+	volume_label = exfat_conv_volume_serial(vol_entry);
+	if (!volume_label)
+		return -EINVAL;
+
+	exfat_info("label: %s\n", volume_label);
+
+	free(volume_label);
+	return 0;
+}
+
+int exfat_set_volume_label(struct exfat_blk_dev *bd,
+		char *label_input, off_t root_clu_off)
+{
+	struct exfat_dentry vol;
+	int nbytes;
+	__u16 volume_label[VOLUME_LABEL_MAX_LEN];
+	int volume_label_len;
+
+	volume_label_len = exfat_utf16_enc(label_input,
+			volume_label, sizeof(volume_label));
+	if (volume_label_len < 0) {
+		exfat_err("failed to encode volume label\n");
+		return -1;
+	}
+
+	vol.type = EXFAT_VOLUME;
+	memset(vol.vol_label, 0, sizeof(vol.vol_label));
+	memcpy(vol.vol_label, volume_label, volume_label_len);
+	vol.vol_char_cnt = volume_label_len/2;
+
+	nbytes = exfat_write(bd->dev_fd, &vol, sizeof(struct exfat_dentry),
+			root_clu_off);
+	if (nbytes != sizeof(struct exfat_dentry)) {
+		exfat_err("volume entry write failed: %d\n", errno);
+		return -1;
+	}
+	fsync(bd->dev_fd);
+
+	exfat_info("new label: %s\n", label_input);
+	return 0;
+}
+
+int exfat_read_sector(struct exfat_blk_dev *bd, void *buf, unsigned int sec_off)
+{
+	int ret;
+	unsigned long long offset = sec_off * bd->sector_size;
+
+	lseek(bd->dev_fd, offset, SEEK_SET);
+	ret = read(bd->dev_fd, buf, bd->sector_size);
+	if (ret < 0) {
+		exfat_err("read failed, sec_off : %u\n", sec_off);
+		return -1;
+	}
+	return 0;
+}
+
+int exfat_write_sector(struct exfat_blk_dev *bd, void *buf,
+		unsigned int sec_off)
+{
+	int bytes;
+	unsigned long long offset = sec_off * bd->sector_size;
+
+	lseek(bd->dev_fd, offset, SEEK_SET);
+	bytes = write(bd->dev_fd, buf, bd->sector_size);
+	if (bytes != (int)bd->sector_size) {
+		exfat_err("write failed, sec_off : %u, bytes : %d\n", sec_off,
+			bytes);
+		return -1;
+	}
+	return 0;
+}
+
+int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
+		unsigned int checksum, bool is_backup)
+{
+	__le32 *checksum_buf;
+	int ret = 0;
+	unsigned int i;
+	unsigned int sec_idx = CHECKSUM_SEC_IDX;
+
+	checksum_buf = malloc(bd->sector_size);
+	if (!checksum_buf)
+		return -1;
+
+	if (is_backup)
+		sec_idx += BACKUP_BOOT_SEC_IDX;
+
+	for (i = 0; i < bd->sector_size / sizeof(int); i++)
+		checksum_buf[i] = cpu_to_le32(checksum);
+
+	ret = exfat_write_sector(bd, checksum_buf, sec_idx);
+	if (ret) {
+		exfat_err("checksum sector write failed\n");
+		goto free;
+	}
+
+free:
+	free(checksum_buf);
+	return ret;
+}
+
+int exfat_show_volume_serial(struct exfat_blk_dev *bd,
+		struct exfat_user_input *ui)
+{
+	struct pbr *ppbr;
+	int ret;
+
+	ppbr = malloc(bd->sector_size);
+	if (!ppbr) {
+		exfat_err("Cannot allocate pbr: out of memory\n");
+		return -1;
+	}
+
+	/* read main boot sector */
+	ret = exfat_read_sector(bd, (char *)ppbr, BOOT_SEC_IDX);
+	if (ret < 0) {
+		exfat_err("main boot sector read failed\n");
+		ret = -1;
+		goto free_ppbr;
+	}
+
+	exfat_info("volume serial : 0x%x\n", ppbr->bsx.vol_serial);
+
+free_ppbr:
+	free(ppbr);
+	return ret;
+}
+
+static int exfat_update_boot_checksum(struct exfat_blk_dev *bd, bool is_backup)
+{
+	unsigned int checksum = 0;
+	int ret, sec_idx, backup_sec_idx = 0;
+	int sector_size = bd->sector_size;
+	unsigned char *buf;
+
+	buf = malloc(bd->sector_size);
+	if (!buf) {
+		exfat_err("Cannot allocate pbr: out of memory\n");
+		return -1;
+	}
+
+	if (is_backup)
+		backup_sec_idx = BACKUP_BOOT_SEC_IDX;
+
+	for (sec_idx = BOOT_SEC_IDX; sec_idx < CHECKSUM_SEC_IDX; sec_idx++) {
+		bool is_boot_sec = false;
+
+		ret = exfat_read_sector(bd, buf, sec_idx + backup_sec_idx);
+		if (ret < 0) {
+			exfat_err("sector(%d) read failed\n", sec_idx);
+			ret = -1;
+			goto free_buf;
+		}
+
+		if (sec_idx == BOOT_SEC_IDX) {
+			is_boot_sec = true;
+			sector_size = sizeof(struct pbr);
+		} else if (sec_idx >= EXBOOT_SEC_IDX && sec_idx < OEM_SEC_IDX)
+			sector_size = sizeof(struct exbs);
+
+		boot_calc_checksum(buf, sector_size, is_boot_sec,
+			&checksum);
+	}
+
+	ret = exfat_write_checksum_sector(bd, checksum, is_backup);
+
+free_buf:
+	free(buf);
+
+	return ret;
+}
+
+int exfat_set_volume_serial(struct exfat_blk_dev *bd,
+		struct exfat_user_input *ui)
+{
+	int ret;
+	struct pbr *ppbr;
+
+	ppbr = malloc(bd->sector_size);
+	if (!ppbr) {
+		exfat_err("Cannot allocate pbr: out of memory\n");
+		return -1;
+	}
+
+	/* read main boot sector */
+	ret = exfat_read_sector(bd, (char *)ppbr, BOOT_SEC_IDX);
+	if (ret < 0) {
+		exfat_err("main boot sector read failed\n");
+		ret = -1;
+		goto free_ppbr;
+	}
+
+	ppbr->bsx.vol_serial = ui->volume_serial;
+
+	/* update main boot sector */
+	ret = exfat_write_sector(bd, (char *)ppbr, BOOT_SEC_IDX);
+	if (ret < 0) {
+		exfat_err("main boot sector write failed\n");
+		ret = -1;
+		goto free_ppbr;
+	}
+
+	/* update backup boot sector */
+	ret = exfat_write_sector(bd, (char *)ppbr, BACKUP_BOOT_SEC_IDX);
+	if (ret < 0) {
+		exfat_err("backup boot sector write failed\n");
+		ret = -1;
+		goto free_ppbr;
+	}
+
+	ret = exfat_update_boot_checksum(bd, 0);
+	if (ret < 0) {
+		exfat_err("main checksum update failed\n");
+		goto free_ppbr;
+	}
+
+	ret = exfat_update_boot_checksum(bd, 1);
+	if (ret < 0)
+		exfat_err("backup checksum update failed\n");
+free_ppbr:
+	free(ppbr);
+
+	exfat_info("New volume serial : 0x%x\n", ui->volume_serial);
+
+	return ret;
+}
+
+unsigned int exfat_clus_to_blk_dev_off(struct exfat_blk_dev *bd,
+		unsigned int clu_off_sectnr, unsigned int clu)
+{
+	return clu_off_sectnr * bd->sector_size +
+		(clu - EXFAT_REVERVED_CLUSTERS) * bd->cluster_size;
+}

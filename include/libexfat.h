@@ -37,6 +37,12 @@
 /* Upcase tabel macro */
 #define EXFAT_UPCASE_TABLE_SIZE		(5836)
 
+/* Flags for tune.exfat and exfatlabel */
+#define EXFAT_GET_VOLUME_LABEL		0x01
+#define EXFAT_SET_VOLUME_LABEL		0x02
+#define EXFAT_GET_VOLUME_SERIAL		0x03
+#define EXFAT_SET_VOLUME_SERIAL		0x04
+
 enum {
 	BOOT_SEC_IDX = 0,
 	EXBOOT_SEC_IDX,
@@ -54,6 +60,7 @@ struct exfat_blk_dev {
 	unsigned int sector_size_bits;
 	unsigned long long num_sectors;
 	unsigned int num_clusters;
+	unsigned int cluster_size;
 };
 
 struct exfat_user_input {
@@ -65,6 +72,7 @@ struct exfat_user_input {
 	bool quick;
 	__u16 volume_label[VOLUME_LABEL_MAX_LEN];
 	int volume_label_len;
+	unsigned int volume_serial;
 };
 
 void show_version(void);
@@ -86,6 +94,24 @@ size_t exfat_utf16_len(const __le16 *str, size_t max_size);
 ssize_t exfat_utf16_enc(const char *in_str, __u16 *out_str, size_t out_size);
 ssize_t exfat_utf16_dec(const __u16 *in_str, size_t in_len,
 			char *out_str, size_t out_size);
+off_t exfat_get_root_entry_offset(struct exfat_blk_dev *bd);
+int exfat_show_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off);
+int exfat_set_volume_label(struct exfat_blk_dev *bd,
+		char *label_input, off_t root_clu_off);
+int exfat_read_sector(struct exfat_blk_dev *bd, void *buf,
+		unsigned int sec_off);
+int exfat_write_sector(struct exfat_blk_dev *bd, void *buf,
+		unsigned int sec_off);
+int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
+		unsigned int checksum, bool is_backup);
+char *exfat_conv_volume_serial(struct exfat_dentry *vol_entry);
+int exfat_show_volume_serial(struct exfat_blk_dev *bd,
+		struct exfat_user_input *ui);
+int exfat_set_volume_serial(struct exfat_blk_dev *bd,
+		struct exfat_user_input *ui);
+unsigned int exfat_clus_to_blk_dev_off(struct exfat_blk_dev *bd,
+		unsigned int clu_off, unsigned int clu);
+
 
 /*
  * Exfat Print

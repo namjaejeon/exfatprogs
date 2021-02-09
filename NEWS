@@ -1,3 +1,16 @@
+exfatprogs 1.1.0 - released 2021-02-09
+======================================
+
+CHANGES :
+ * fsck.exfat: recover corrupted boot region.
+
+NEW FEATURES :
+ * exfatlabel: Print or Set volume label and serial.
+ * dump.exfat: Show the on-disk metadata information and the statistics.
+
+BUG FIXES :
+ * set _FILE_OFFSET_BITS=64 for Android build.
+
 exfatprogs 1.0.4 - released 2020-07-31
 ======================================
 
