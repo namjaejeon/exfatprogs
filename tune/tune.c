@@ -20,7 +20,7 @@ static void usage(void)
 	fprintf(stderr, "\t-l | --print-label                    Print volume label\n");
 	fprintf(stderr, "\t-L | --set-label=label                Set volume label\n");
 	fprintf(stderr, "\t-i | --print-serial                   Print volume serial\n");
-	fprintf(stderr, "\t-L | --set-serial=value               Set volume serial\n");
+	fprintf(stderr, "\t-I | --set-serial=value               Set volume serial\n");
 	fprintf(stderr, "\t-V | --version                        Show version\n");
 	fprintf(stderr, "\t-v | --verbose                        Print debug\n");
 	fprintf(stderr, "\t-h | --help                           Show help\n");
