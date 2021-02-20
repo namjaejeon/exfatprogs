@@ -393,16 +393,20 @@ int exfat_show_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
 		sizeof(struct exfat_dentry), root_clu_off);
 	if (nbytes != sizeof(struct exfat_dentry)) {
 		exfat_err("volume entry read failed: %d\n", errno);
+		free(vol_entry);
 		return -1;
 	}
 
 	volume_label = exfat_conv_volume_label(vol_entry);
-	if (!volume_label)
+	if (!volume_label) {
+		free(vol_entry);
 		return -EINVAL;
+	}
 
 	exfat_info("label: %s\n", volume_label);
 
 	free(volume_label);
+	free(vol_entry);
 	return 0;
 }
 
