@@ -356,7 +356,7 @@ off_t exfat_get_root_entry_offset(struct exfat_blk_dev *bd)
 	return root_clu_off;
 }
 
-char *exfat_conv_volume_serial(struct exfat_dentry *vol_entry)
+char *exfat_conv_volume_label(struct exfat_dentry *vol_entry)
 {
 	char *volume_label;
 	__le16 disk_label[VOLUME_LABEL_MAX_LEN];
@@ -395,7 +395,7 @@ int exfat_show_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
 		return -1;
 	}
 
-	volume_label = exfat_conv_volume_serial(vol_entry);
+	volume_label = exfat_conv_volume_label(vol_entry);
 	if (!volume_label)
 		return -EINVAL;
 

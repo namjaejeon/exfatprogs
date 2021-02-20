@@ -148,7 +148,7 @@ int exfat_show_ondisk_all_info(struct exfat_blk_dev *bd)
 		goto free_entry;
 	}
 
-	volume_label = exfat_conv_volume_serial(&ed[0]);
+	volume_label = exfat_conv_volume_label(&ed[0]);
 	if (!volume_label) {
 		ret = -EINVAL;
 		goto free_entry;
