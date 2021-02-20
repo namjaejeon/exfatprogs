@@ -370,6 +370,7 @@ char *exfat_conv_volume_label(struct exfat_dentry *vol_entry)
 	if (exfat_utf16_dec(disk_label, vol_entry->vol_char_cnt*2,
 		volume_label, VOLUME_LABEL_BUFFER_SIZE) < 0) {
 		exfat_err("failed to decode volume label\n");
+		free(volume_label);
 		return NULL;
 	}
 
