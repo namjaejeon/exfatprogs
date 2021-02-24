@@ -17,6 +17,8 @@ mkfs.exfat \- create an exFAT filesystem
 .B \-L
 .I volume_label
 ] [
+.B \-\-pack\-bitmap
+] [
 .B \-v
 ]
 .I device
@@ -81,6 +83,23 @@ Prints the help and exit.
 .TP
 .BR \-L ", " \-\-volume\-label =\fIlabel\fR
 Specifies the volume label to be associated with the exFAT filesystem.
+.TP
+.B \-\-pack\-bitmap
+Attempts to relocate the exFAT allocation bitmap so that it ends at the
+alignment boundary immediately following the FAT rather than beginning at that
+boundary.
+This strictly violates the SD card specification but may improve performance
+and endurance on SD cards and other flash media not designed for use with exFAT
+by allowing file-system metadata updates to touch fewer flash allocation units.
+Furthermore, many SD cards and other flash devices specially optimize the
+allocation unit where the FAT resides so as to support tiny writes with reduced
+write amplification but expect only larger writes in subsequent allocation
+units \[em] where the exFAT bitmap would be placed by default.
+Specifying \fB\-\-pack\-bitmap\fR attempts to avoid the potential problems
+associated with issuing many small writes to the bitmap by making it share an
+allocation unit with the FAT.
+If there is insufficient space for the bitmap there, then this option will have
+no effect, and the bitmap will be aligned at the boundary as by default.
 .TP
 .BR \-v ", " \-\-verbose
 Prints verbose debugging information while creating the exFAT filesystem.

@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <errno.h>
 #include <locale.h>
 #include <time.h>
@@ -360,22 +361,29 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: mkfs.exfat\n");
-	fprintf(stderr, "\t-L | --volume-label=label                              Set volume label\n");
-	fprintf(stderr, "\t-c | --cluster-size=size(or suffixed by 'K' or 'M')    Specify cluster size\n");
-	fprintf(stderr, "\t-b | --boundary-align=size(or suffixed by 'K' or 'M')  Specify boundary alignment\n");
-	fprintf(stderr, "\t-f | --full-format                                     Full format\n");
-	fprintf(stderr, "\t-V | --version                                         Show version\n");
-	fprintf(stderr, "\t-v | --verbose                                         Print debug\n");
-	fprintf(stderr, "\t-h | --help                                            Show help\n");
+	fputs("Usage: mkfs.exfat\n"
+		"\t-L | --volume-label=label                              Set volume label\n"
+		"\t-c | --cluster-size=size(or suffixed by 'K' or 'M')    Specify cluster size\n"
+		"\t-b | --boundary-align=size(or suffixed by 'K' or 'M')  Specify boundary alignment\n"
+		"\t     --pack-bitmap                                     Move bitmap into FAT segment\n"
+		"\t-f | --full-format                                     Full format\n"
+		"\t-V | --version                                         Show version\n"
+		"\t-v | --verbose                                         Print debug\n"
+		"\t-h | --help                                            Show help\n",
+		stderr);
 
 	exit(EXIT_FAILURE);
 }
 
-static struct option opts[] = {
+enum LongOption {
+	PACK_BITMAP = CHAR_MAX + 1,
+};
+
+static const struct option opts[] = {
 	{"volume-label",	required_argument,	NULL,	'L' },
 	{"cluster-size",	required_argument,	NULL,	'c' },
 	{"boundary-align",	required_argument,	NULL,	'b' },
+	{"pack-bitmap",		no_argument,		NULL,	PACK_BITMAP },
 	{"full-format",		no_argument,		NULL,	'f' },
 	{"version",		no_argument,		NULL,	'V' },
 	{"verbose",		no_argument,		NULL,	'v' },
@@ -445,7 +453,8 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 
 	finfo.bitmap_byte_off = finfo.clu_byte_off;
 	finfo.bitmap_byte_len = round_up(finfo.total_clu_cnt, 8) / 8;
-	exfat_pack_bitmap(ui);
+	if (ui->pack_bitmap)
+		exfat_pack_bitmap(ui);
 	clu_len = round_up(finfo.bitmap_byte_len, ui->cluster_size);
 
 	finfo.ut_start_clu = EXFAT_FIRST_CLUSTER + clu_len / ui->cluster_size;
@@ -626,6 +635,9 @@ int main(int argc, char *argv[])
 				goto out;
 			}
 			ui.boundary_align = ret;
+			break;
+		case PACK_BITMAP:
+			ui.pack_bitmap = true;
 			break;
 		case 'f':
 			ui.quick = false;
