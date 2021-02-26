@@ -108,9 +108,10 @@ static int exfat_show_ondisk_all_info(struct exfat_blk_dev *bd)
 	}
 
 	if (bd->sector_size != 1 << pbsx->sect_size_bits) {
-		exfat_err("bogus sectors size : %u(sector size bits : %u)\n",
+		exfat_err("bogus sector size : %u (sector size bits : %u)\n",
 				bd->sector_size, pbsx->sect_size_bits);
-
+		ret = -EINVAL;
+		goto free_ppbr;
 	}
 
 	clu_offset = le32_to_cpu(pbsx->clu_offset);
