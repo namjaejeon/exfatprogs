@@ -79,14 +79,14 @@ static int exfat_show_ondisk_all_info(struct exfat_blk_dev *bd)
 	ppbr = malloc(bd->sector_size);
 	if (!ppbr) {
 		exfat_err("Cannot allocate pbr: out of memory\n");
-		return -1;
+		return -ENOMEM;
 	}
 
 	/* read main boot sector */
 	ret = exfat_read_sector(bd, (char *)ppbr, BOOT_SEC_IDX);
 	if (ret < 0) {
 		exfat_err("main boot sector read failed\n");
-		ret = -1;
+		ret = -EIO;
 		goto free_ppbr;
 	}
 
@@ -180,6 +180,7 @@ static int exfat_show_ondisk_all_info(struct exfat_blk_dev *bd)
 	bitmap = malloc(bitmap_len);
 	if (!bitmap) {
 		exfat_err("bitmap allocation failed\n");
+		ret = -ENOMEM;
 		goto free_volume_label;
 	}
 
