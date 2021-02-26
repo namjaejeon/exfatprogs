@@ -164,17 +164,20 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 	}
 
 	if (fstat(fd, &st) == 0 && S_ISBLK(st.st_mode)) {
-		char pathname[43];
+		char pathname[sizeof("/sys/dev/block/4294967295:4294967295/start")];
 		FILE *fp;
-		snprintf(pathname, sizeof pathname, "/sys/dev/block/%u:%u/start",
+
+		snprintf(pathname, sizeof(pathname), "/sys/dev/block/%u:%u/start",
 			major(st.st_rdev), minor(st.st_rdev));
-		if ((fp = fopen(pathname, "r")) != NULL) {
-			if (fscanf(fp, "%llu", &blk_dev_offset) == 1)
+		fp = fopen(pathname, "r");
+		if (fp != NULL) {
+			if (fscanf(fp, "%llu", &blk_dev_offset) == 1) {
 				/*
 				 * Linux kernel always reports partition offset
 				 * in 512-byte units, regardless of sector size
 				 */
 				blk_dev_offset <<= 9;
+			}
 			fclose(fp);
 		}
 	}

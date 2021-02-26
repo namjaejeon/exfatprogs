@@ -375,9 +375,7 @@ static void usage(void)
 	exit(EXIT_FAILURE);
 }
 
-enum LongOption {
-	PACK_BITMAP = CHAR_MAX + 1,
-};
+#define PACK_BITMAP (CHAR_MAX + 1)
 
 static const struct option opts[] = {
 	{"volume-label",	required_argument,	NULL,	'L' },
@@ -398,11 +396,13 @@ static const struct option opts[] = {
  * bitmap to share the same allocation unit on flash media, thereby improving
  * performance and endurance.
  */
-static int exfat_pack_bitmap(const struct exfat_user_input *ui) {
+static int exfat_pack_bitmap(const struct exfat_user_input *ui)
+{
 	unsigned int fat_byte_end = finfo.fat_byte_off + finfo.fat_byte_len,
 		bitmap_byte_len = finfo.bitmap_byte_len,
 		bitmap_clu_len = round_up(bitmap_byte_len, ui->cluster_size),
 		bitmap_clu_cnt, total_clu_cnt, new_bitmap_clu_len;
+
 	for (;;) {
 		bitmap_clu_cnt = bitmap_clu_len / ui->cluster_size;
 		if (finfo.clu_byte_off - bitmap_clu_len < fat_byte_end ||
