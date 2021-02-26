@@ -96,13 +96,15 @@ static int exfat_show_ondisk_all_info(struct exfat_blk_dev *bd)
 	    pbsx->sect_size_bits > EXFAT_MAX_SECT_SIZE_BITS) {
 		exfat_err("bogus sector size bits : %u\n",
 				pbsx->sect_size_bits);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto free_ppbr;
 	}
 
 	if (pbsx->sect_per_clus_bits > 25 - pbsx->sect_size_bits) {
 		exfat_err("bogus sectors bits per cluster : %u\n",
 				pbsx->sect_per_clus_bits);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto free_ppbr;
 	}
 
 	if (bd->sector_size != 1 << pbsx->sect_size_bits) {
