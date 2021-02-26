@@ -368,6 +368,7 @@ off_t exfat_get_root_entry_offset(struct exfat_blk_dev *bd)
 	nbytes = exfat_read(bd->dev_fd, bs, sizeof(struct pbr), 0);
 	if (nbytes != sizeof(struct pbr)) {
 		exfat_err("boot sector read failed: %d\n", errno);
+		free(bs);
 		return -1;
 	}
 
