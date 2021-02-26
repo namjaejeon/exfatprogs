@@ -64,7 +64,7 @@ static unsigned int exfat_count_used_clusters(unsigned char *bitmap,
 	return count;
 }
 
-int exfat_show_ondisk_all_info(struct exfat_blk_dev *bd)
+static int exfat_show_ondisk_all_info(struct exfat_blk_dev *bd)
 {
 	struct pbr *ppbr;
 	struct bsx64 *pbsx;
