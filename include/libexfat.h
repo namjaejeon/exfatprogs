@@ -55,6 +55,7 @@ enum {
 
 struct exfat_blk_dev {
 	int dev_fd;
+	unsigned long long offset;
 	unsigned long long size;
 	unsigned int sector_size;
 	unsigned int sector_size_bits;
@@ -69,6 +70,7 @@ struct exfat_user_input {
 	unsigned int cluster_size;
 	unsigned int sec_per_clu;
 	unsigned int boundary_align;
+	bool pack_bitmap;
 	bool quick;
 	__u16 volume_label[VOLUME_LABEL_MAX_LEN];
 	int volume_label_len;
