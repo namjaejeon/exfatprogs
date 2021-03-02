@@ -736,6 +736,7 @@ static int restore_boot_region(struct exfat_blk_dev *bd)
 {
 	int i;
 	char *sector;
+	int ret;
 
 	sector = malloc(bd->sector_size);
 	if (!sector)
@@ -745,21 +746,31 @@ static int restore_boot_region(struct exfat_blk_dev *bd)
 		if (exfat_read(bd->dev_fd, sector, bd->sector_size,
 				BACKUP_BOOT_SEC_IDX * bd->sector_size +
 				i * bd->sector_size) !=
-				(ssize_t)bd->sector_size)
-			return -EIO;
+				(ssize_t)bd->sector_size) {
+			ret = -EIO;
+			goto free_sector;
+		}
 		if (i == 0)
 			((struct pbr *)sector)->bsx.perc_in_use = 0xff;
 
 		if (exfat_write(bd->dev_fd, sector, bd->sector_size,
 				BOOT_SEC_IDX * bd->sector_size +
 				i * bd->sector_size) !=
-				(ssize_t)bd->sector_size)
-			return -EIO;
+				(ssize_t)bd->sector_size) {
+			ret = -EIO;
+			goto free_sector;
+		}
 	}
-	if (fsync(bd->dev_fd))
-		return -EIO;
+
+	if (fsync(bd->dev_fd)) {
+		ret = -EIO;
+		goto free_sector;
+	}
+	ret = 0;
+
+free_sector:
 	free(sector);
-	return 0;
+	return ret;
 }
 
 static int exfat_boot_region_check(struct exfat *exfat, struct pbr **bs)
