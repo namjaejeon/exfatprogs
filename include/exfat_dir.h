@@ -24,6 +24,26 @@ struct exfat_de_iter {
 	int			max_skip_dentries;
 };
 
+struct exfat_lookup_filter {
+	struct {
+		uint8_t		type;
+		/* return 0 if matched, return 1 if not matched,
+		 * otherwise return errno
+		 */
+		int		(*filter)(struct exfat_de_iter *iter,
+					  void *param, int *dentry_count);
+		void		*param;
+	} in;
+	struct {
+		struct exfat_dentry	*dentry_set;
+		int			dentry_count;
+		/* device offset where the dentry_set locates, or
+		 * the empty slot locates or EOF if not found.
+		 */
+		off_t			dentry_d_offset;
+	} out;
+};
+
 int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 		       struct exfat_inode *dir, struct buffer_desc *bd);
 int exfat_de_iter_get(struct exfat_de_iter *iter,
@@ -32,5 +52,9 @@ int exfat_de_iter_get_dirty(struct exfat_de_iter *iter,
 			    int ith, struct exfat_dentry **dentry);
 int exfat_de_iter_flush(struct exfat_de_iter *iter);
 int exfat_de_iter_advance(struct exfat_de_iter *iter, int skip_dentries);
+off_t exfat_de_iter_device_offset(struct exfat_de_iter *iter);
+
+int exfat_lookup_dentry_set(struct exfat *exfat, struct exfat_inode *parent,
+			    struct exfat_lookup_filter *filter);
 
 #endif
