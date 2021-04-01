@@ -37,6 +37,7 @@ typedef __u32 clus_t;
 #define VOLUME_LABEL_BUFFER_SIZE	(VOLUME_LABEL_MAX_LEN*MB_LEN_MAX+1)
 
 /* Upcase table macro */
+#define EXFAT_UPCASE_TABLE_CHARS	(0x10000)
 #define EXFAT_UPCASE_TABLE_SIZE		(5836)
 
 /* Flags for tune.exfat and exfatlabel */

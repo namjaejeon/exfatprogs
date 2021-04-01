@@ -37,6 +37,7 @@ struct exfat {
 	char			*disk_bitmap;
 	clus_t			disk_bitmap_clus;
 	unsigned int		disk_bitmap_size;
+	__u16			*upcase_table;
 };
 
 struct path_resolve_ctx {
