@@ -698,6 +698,23 @@ off_t exfat_c2o(struct exfat *exfat, unsigned int clus)
 				 exfat->bs->bsx.sect_per_clus_bits));
 }
 
+int exfat_o2c(struct exfat *exfat, off_t device_offset,
+	      unsigned int *clu, unsigned int *offset)
+{
+	off_t heap_offset;
+
+	heap_offset = exfat_s2o(exfat, le32_to_cpu(exfat->bs->bsx.clu_offset));
+	if (device_offset < heap_offset)
+		return -ERANGE;
+
+	*clu = (unsigned int)((device_offset - heap_offset) /
+			      exfat->clus_size) + EXFAT_FIRST_CLUSTER;
+	if (!exfat_heap_clus(exfat, *clu))
+		return -ERANGE;
+	*offset = (device_offset - heap_offset) % exfat->clus_size;
+	return 0;
+}
+
 bool exfat_heap_clus(struct exfat *exfat, clus_t clus)
 {
 	return clus >= EXFAT_FIRST_CLUSTER &&

@@ -156,8 +156,10 @@ struct exfat_dentry {
 			__le16 access_date;
 			__u8 create_time_ms;
 			__u8 modify_time_ms;
-			__u8 access_time_ms;
-			__u8 reserved2[9];
+			__u8 create_tz;
+			__u8 modify_tz;
+			__u8 access_tz;
+			__u8 reserved2[7];
 		} __attribute__((packed)) file; /* file directory entry */
 		struct {
 			__u8 flags;

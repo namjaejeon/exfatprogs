@@ -145,6 +145,8 @@ int exfat_get_next_clus(struct exfat *exfat, struct exfat_inode *node,
 int exfat_set_fat(struct exfat *exfat, clus_t clus, clus_t next_clus);
 off_t exfat_s2o(struct exfat *exfat, off_t sect);
 off_t exfat_c2o(struct exfat *exfat, unsigned int clus);
+int exfat_o2c(struct exfat *exfat, off_t device_offset,
+	      unsigned int *clu, unsigned int *offset);
 bool exfat_heap_clus(struct exfat *exfat, clus_t clus);
 
 /*

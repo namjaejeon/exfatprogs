@@ -58,5 +58,7 @@ int exfat_lookup_dentry_set(struct exfat *exfat, struct exfat_inode *parent,
 			    struct exfat_lookup_filter *filter);
 int exfat_lookup_file(struct exfat *exfat, struct exfat_inode *parent,
 		      const char *name, struct exfat_lookup_filter *filter_out);
+int exfat_create_file(struct exfat *exfat, struct exfat_inode *parent,
+		      const char *name, unsigned short attr);
 
 #endif
