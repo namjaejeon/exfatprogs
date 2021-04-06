@@ -422,3 +422,67 @@ out:
 		exfat_free_buffer(bd, 2);
 	return retval;
 }
+
+static int filter_lookup_file(struct exfat_de_iter *de_iter,
+			      void *param, int *dentry_count)
+{
+	struct exfat_dentry *file_de, *stream_de, *name_de;
+	__le16 *name;
+	int retval, name_len;
+	int i;
+
+	retval = exfat_de_iter_get(de_iter, 0, &file_de);
+	if (retval || file_de->type != EXFAT_FILE)
+		return 1;
+
+	retval = exfat_de_iter_get(de_iter, 1, &stream_de);
+	if (retval || stream_de->type != EXFAT_STREAM)
+		return 1;
+
+	name = (__le16 *)param;
+	name_len = (int)exfat_utf16_len(name, PATH_MAX);
+
+	if (file_de->dentry.file.num_ext <
+		1 + (name_len + ENTRY_NAME_MAX - 1) / ENTRY_NAME_MAX)
+		return 1;
+
+	for (i = 2; i <= file_de->dentry.file.num_ext && name_len > 0; i++) {
+		int len;
+
+		retval = exfat_de_iter_get(de_iter, i, &name_de);
+		if (retval || name_de->type != EXFAT_NAME)
+			return 1;
+
+		len = MIN(name_len, ENTRY_NAME_MAX);
+		if (memcmp(name_de->dentry.name.unicode_0_14,
+			   name, len * 2) != 0)
+			return 1;
+
+		name += len;
+		name_len -= len;
+	}
+
+	*dentry_count = i;
+	return 0;
+}
+
+int exfat_lookup_file(struct exfat *exfat, struct exfat_inode *parent,
+		      const char *name, struct exfat_lookup_filter *filter_out)
+{
+	int retval;
+	__le16 utf16_name[PATH_MAX + 2] = {0, };
+
+	retval = (int)exfat_utf16_enc(name, utf16_name, sizeof(utf16_name));
+	if (retval < 0)
+		return retval;
+
+	filter_out->in.type = EXFAT_FILE;
+	filter_out->in.filter = filter_lookup_file;
+	filter_out->in.param = utf16_name;
+
+	retval = exfat_lookup_dentry_set(exfat, parent, filter_out);
+	if (retval < 0)
+		return retval;
+
+	return 0;
+}
