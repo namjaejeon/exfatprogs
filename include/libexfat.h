@@ -101,11 +101,21 @@ typedef __u32	bitmap_t;
 
 #define EXFAT_BITMAP_SIZE(__c_count)	\
 	(DIV_ROUND_UP(__c_count, BITS_PER) * sizeof(bitmap_t))
-#define EXFAT_BITMAP_GET(__bmap, __c)	\
-			(((bitmap_t *)(__bmap))[BIT_ENTRY(__c)] & BIT_MASK(__c))
-#define EXFAT_BITMAP_SET(__bmap, __c)	\
-			(((bitmap_t *)(__bmap))[BIT_ENTRY(__c)] |= \
-			 BIT_MASK(__c))
+
+static inline bool exfat_bitmap_get(char *bmap, clus_t c)
+{
+	clus_t cc = c - EXFAT_FIRST_CLUSTER;
+
+	return ((bitmap_t *)(bmap))[BIT_ENTRY(cc)] & BIT_MASK(cc);
+}
+
+static inline void exfat_bitmap_set(char *bmap, clus_t c)
+{
+	clus_t cc = c - EXFAT_FIRST_CLUSTER;
+
+	(((bitmap_t *)(bmap))[BIT_ENTRY(cc)] |= BIT_MASK(cc));
+}
+
 void exfat_bitmap_set_range(struct exfat *exfat, char *bitmap,
 			    clus_t start_clus, clus_t count);
 

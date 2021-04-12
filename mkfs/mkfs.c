@@ -314,12 +314,13 @@ static int exfat_create_bitmap(struct exfat_blk_dev *bd)
 	char *bitmap;
 	unsigned int i, nbytes;
 
-	bitmap = calloc(EXFAT_BITMAP_SIZE(finfo.total_clu_cnt), sizeof(*bitmap));
+	bitmap = calloc(round_up(finfo.bitmap_byte_len, sizeof(bitmap_t)),
+			sizeof(*bitmap));
 	if (!bitmap)
 		return -1;
 
-	for (i = 0; i < finfo.used_clu_cnt - EXFAT_FIRST_CLUSTER; i++)
-		EXFAT_BITMAP_SET(bitmap, i);
+	for (i = EXFAT_FIRST_CLUSTER; i < finfo.used_clu_cnt; i++)
+		exfat_bitmap_set(bitmap, i);
 
 	nbytes = pwrite(bd->dev_fd, bitmap, finfo.bitmap_byte_len, finfo.bitmap_byte_off);
 	if (nbytes != finfo.bitmap_byte_len) {
