@@ -642,8 +642,7 @@ unsigned int exfat_clus_to_blk_dev_off(struct exfat_blk_dev *bd,
 		(clu - EXFAT_RESERVED_CLUSTERS) * bd->cluster_size;
 }
 
-int exfat_get_next_clus(struct exfat *exfat, struct exfat_inode *node,
-			clus_t clus, clus_t *next)
+int exfat_get_next_clus(struct exfat *exfat, clus_t clus, clus_t *next)
 {
 	off_t offset;
 
@@ -651,11 +650,6 @@ int exfat_get_next_clus(struct exfat *exfat, struct exfat_inode *node,
 
 	if (!exfat_heap_clus(exfat, clus))
 		return -EINVAL;
-
-	if (node->is_contiguous) {
-		*next = clus + 1;
-		return 0;
-	}
 
 	offset = (off_t)le32_to_cpu(exfat->bs->bsx.fat_offset) <<
 				exfat->bs->bsx.sect_size_bits;
@@ -666,6 +660,21 @@ int exfat_get_next_clus(struct exfat *exfat, struct exfat_inode *node,
 		return -EIO;
 	*next = le32_to_cpu(*next);
 	return 0;
+}
+
+int exfat_get_inode_next_clus(struct exfat *exfat, struct exfat_inode *node,
+			      clus_t clus, clus_t *next)
+{
+	*next = EXFAT_EOF_CLUSTER;
+
+	if (node->is_contiguous) {
+		if (!exfat_heap_clus(exfat, clus))
+			return -EINVAL;
+		*next = clus + 1;
+		return 0;
+	}
+
+	return exfat_get_next_clus(exfat, clus, next);
 }
 
 int exfat_set_fat(struct exfat *exfat, clus_t clus, clus_t next_clus)

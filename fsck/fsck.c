@@ -159,7 +159,7 @@ static int check_clus_chain(struct exfat_de_iter *de_iter,
 		}
 
 		/* This cluster is allocated or not */
-		if (exfat_get_next_clus(exfat, node, clus, &next))
+		if (exfat_get_inode_next_clus(exfat, node, clus, &next))
 			goto truncate_file;
 		if (next == EXFAT_BAD_CLUSTER) {
 			if (repair_file_ask(de_iter, node,
@@ -253,7 +253,7 @@ static bool root_get_clus_count(struct exfat *exfat, struct exfat_inode *node,
 
 		exfat_bitmap_set(exfat->alloc_bitmap, clus);
 
-		if (exfat_get_next_clus(exfat, node, clus, &clus) != 0) {
+		if (exfat_get_inode_next_clus(exfat, node, clus, &clus) != 0) {
 			exfat_err("/: broken cluster chain\n");
 			return false;
 		}
