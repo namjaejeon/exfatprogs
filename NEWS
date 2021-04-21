@@ -1,3 +1,19 @@
+exfatprogs 1.1.1 - released 2021-04-21
+======================================
+
+CHANGES :
+ * mkfs.exfat: adjust the boundary alignment calculations to compensate
+   for the volume offset.
+
+NEW FEATURES :
+ * mkfs.exfat: add the "--pack-bitmap" option to relocate the allocation
+   bitmap to allow the FAT and the bitmap to share the same allocation
+   unit on flash media.
+
+BUG FIXES :
+ * Fix wrong bit operations on 64-bit big.
+ * Fix memory leaks in error paths.
+
 exfatprogs 1.1.0 - released 2021-02-09
 ======================================
 
