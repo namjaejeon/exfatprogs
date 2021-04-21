@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <sys/sysmacros.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -19,18 +20,20 @@
 #include "libexfat.h"
 #include "version.h"
 
+#define BITS_PER_LONG		(sizeof(long) * CHAR_BIT)
+
 #ifdef WORDS_BIGENDIAN
-#define BITOP_LE_SWIZZLE	(~0x7)
+#define BITOP_LE_SWIZZLE	((BITS_PER_LONG - 1) & ~0x7)
 #else
 #define BITOP_LE_SWIZZLE        0
 #endif
 
-#define BIT_MASK(nr)            ((1) << ((nr) % 32))
-#define BIT_WORD(nr)            ((nr) / 32)
+#define BIT_MASK(nr)            (1UL << ((nr) % BITS_PER_LONG))
+#define BIT_WORD(nr)            ((nr) / BITS_PER_LONG)
 
 unsigned int print_level  = EXFAT_INFO;
 
-static inline void set_bit(int nr, unsigned int *addr)
+static inline void set_bit(int nr, void *addr)
 {
 	unsigned long mask = BIT_MASK(nr);
 	unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
@@ -38,7 +41,7 @@ static inline void set_bit(int nr, unsigned int *addr)
 	*p  |= mask;
 }
 
-static inline void clear_bit(int nr, unsigned int *addr)
+static inline void clear_bit(int nr, void *addr)
 {
 	unsigned long mask = BIT_MASK(nr);
 	unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
@@ -144,6 +147,8 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 {
 	int fd, ret = -1;
 	off_t blk_dev_size;
+	struct stat st;
+	unsigned long long blk_dev_offset = 0;
 
 	fd = open(ui->dev_name, ui->writeable ? O_RDWR|O_EXCL : O_RDONLY);
 	if (fd < 0) {
@@ -160,7 +165,27 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 		goto out;
 	}
 
+	if (fstat(fd, &st) == 0 && S_ISBLK(st.st_mode)) {
+		char pathname[sizeof("/sys/dev/block/4294967295:4294967295/start")];
+		FILE *fp;
+
+		snprintf(pathname, sizeof(pathname), "/sys/dev/block/%u:%u/start",
+			major(st.st_rdev), minor(st.st_rdev));
+		fp = fopen(pathname, "r");
+		if (fp != NULL) {
+			if (fscanf(fp, "%llu", &blk_dev_offset) == 1) {
+				/*
+				 * Linux kernel always reports partition offset
+				 * in 512-byte units, regardless of sector size
+				 */
+				blk_dev_offset <<= 9;
+			}
+			fclose(fp);
+		}
+	}
+
 	bd->dev_fd = fd;
+	bd->offset = blk_dev_offset;
 	bd->size = blk_dev_size;
 	if (!ui->cluster_size)
 		exfat_set_default_cluster_size(bd, ui);
@@ -175,7 +200,8 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 	bd->num_clusters = blk_dev_size / ui->cluster_size;
 
 	exfat_debug("Block device name : %s\n", ui->dev_name);
-	exfat_debug("Block device size : %lld\n", bd->size);
+	exfat_debug("Block device offset : %llu\n", bd->offset);
+	exfat_debug("Block device size : %llu\n", bd->size);
 	exfat_debug("Block sector size : %u\n", bd->sector_size);
 	exfat_debug("Number of the sectors : %llu\n",
 		bd->num_sectors);
@@ -344,19 +370,20 @@ off_t exfat_get_root_entry_offset(struct exfat_blk_dev *bd)
 	nbytes = exfat_read(bd->dev_fd, bs, sizeof(struct pbr), 0);
 	if (nbytes != sizeof(struct pbr)) {
 		exfat_err("boot sector read failed: %d\n", errno);
+		free(bs);
 		return -1;
 	}
 
 	cluster_size = (1 << bs->bsx.sect_per_clus_bits) * bd->sector_size;
 	root_clu_off = le32_to_cpu(bs->bsx.clu_offset) * bd->sector_size +
-		le32_to_cpu(bs->bsx.root_cluster - EXFAT_REVERVED_CLUSTERS)
+		le32_to_cpu(bs->bsx.root_cluster - EXFAT_RESERVED_CLUSTERS)
 		* cluster_size;
 	free(bs);
 
 	return root_clu_off;
 }
 
-char *exfat_conv_volume_serial(struct exfat_dentry *vol_entry)
+char *exfat_conv_volume_label(struct exfat_dentry *vol_entry)
 {
 	char *volume_label;
 	__le16 disk_label[VOLUME_LABEL_MAX_LEN];
@@ -370,6 +397,7 @@ char *exfat_conv_volume_serial(struct exfat_dentry *vol_entry)
 	if (exfat_utf16_dec(disk_label, vol_entry->vol_char_cnt*2,
 		volume_label, VOLUME_LABEL_BUFFER_SIZE) < 0) {
 		exfat_err("failed to decode volume label\n");
+		free(volume_label);
 		return NULL;
 	}
 
@@ -392,16 +420,20 @@ int exfat_show_volume_label(struct exfat_blk_dev *bd, off_t root_clu_off)
 		sizeof(struct exfat_dentry), root_clu_off);
 	if (nbytes != sizeof(struct exfat_dentry)) {
 		exfat_err("volume entry read failed: %d\n", errno);
+		free(vol_entry);
 		return -1;
 	}
 
-	volume_label = exfat_conv_volume_serial(vol_entry);
-	if (!volume_label)
+	volume_label = exfat_conv_volume_label(vol_entry);
+	if (!volume_label) {
+		free(vol_entry);
 		return -EINVAL;
+	}
 
 	exfat_info("label: %s\n", volume_label);
 
 	free(volume_label);
+	free(vol_entry);
 	return 0;
 }
 
@@ -626,5 +658,5 @@ unsigned int exfat_clus_to_blk_dev_off(struct exfat_blk_dev *bd,
 		unsigned int clu_off_sectnr, unsigned int clu)
 {
 	return clu_off_sectnr * bd->sector_size +
-		(clu - EXFAT_REVERVED_CLUSTERS) * bd->cluster_size;
+		(clu - EXFAT_RESERVED_CLUSTERS) * bd->cluster_size;
 }

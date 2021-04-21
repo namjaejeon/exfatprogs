@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <errno.h>
 #include <locale.h>
 #include <time.h>
@@ -53,7 +54,7 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	memset(pbpb->res_zero, 0, 53);
 
 	/* Fill exfat extend BIOS paramemter block */
-	pbsx->vol_offset = 0;
+	pbsx->vol_offset = cpu_to_le64(bd->offset / bd->sector_size);
 	pbsx->vol_length = cpu_to_le64(bd->size / bd->sector_size);
 	pbsx->fat_offset = cpu_to_le32(finfo.fat_byte_off / bd->sector_size);
 	pbsx->fat_length = cpu_to_le32(finfo.fat_byte_len / bd->sector_size);
@@ -76,6 +77,8 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	memset(ppbr->boot_code, 0, 390);
 	ppbr->signature = cpu_to_le16(PBR_SIGNATURE);
 
+	exfat_debug("Volume Offset(sectors) : %" PRIu64 "\n",
+		le64_to_cpu(pbsx->vol_offset));
 	exfat_debug("Volume Length(sectors) : %" PRIu64 "\n",
 		le64_to_cpu(pbsx->vol_length));
 	exfat_debug("FAT Offset(sector offset) : %u\n",
@@ -358,22 +361,27 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: mkfs.exfat\n");
-	fprintf(stderr, "\t-L | --volume-label=label                              Set volume label\n");
-	fprintf(stderr, "\t-c | --cluster-size=size(or suffixed by 'K' or 'M')    Specify cluster size\n");
-	fprintf(stderr, "\t-b | --boundary-align=size(or suffixed by 'K' or 'M')  Specify boundary alignment\n");
-	fprintf(stderr, "\t-f | --full-format                                     Full format\n");
-	fprintf(stderr, "\t-V | --version                                         Show version\n");
-	fprintf(stderr, "\t-v | --verbose                                         Print debug\n");
-	fprintf(stderr, "\t-h | --help                                            Show help\n");
+	fputs("Usage: mkfs.exfat\n"
+		"\t-L | --volume-label=label                              Set volume label\n"
+		"\t-c | --cluster-size=size(or suffixed by 'K' or 'M')    Specify cluster size\n"
+		"\t-b | --boundary-align=size(or suffixed by 'K' or 'M')  Specify boundary alignment\n"
+		"\t     --pack-bitmap                                     Move bitmap into FAT segment\n"
+		"\t-f | --full-format                                     Full format\n"
+		"\t-V | --version                                         Show version\n"
+		"\t-v | --verbose                                         Print debug\n"
+		"\t-h | --help                                            Show help\n",
+		stderr);
 
 	exit(EXIT_FAILURE);
 }
 
-static struct option opts[] = {
+#define PACK_BITMAP (CHAR_MAX + 1)
+
+static const struct option opts[] = {
 	{"volume-label",	required_argument,	NULL,	'L' },
 	{"cluster-size",	required_argument,	NULL,	'c' },
 	{"boundary-align",	required_argument,	NULL,	'b' },
+	{"pack-bitmap",		no_argument,		NULL,	PACK_BITMAP },
 	{"full-format",		no_argument,		NULL,	'f' },
 	{"version",		no_argument,		NULL,	'V' },
 	{"verbose",		no_argument,		NULL,	'v' },
@@ -382,9 +390,43 @@ static struct option opts[] = {
 	{NULL,			0,			NULL,	 0  }
 };
 
+/*
+ * Moves the bitmap to just before the alignment boundary if there is space
+ * between the boundary and the end of the FAT. This may allow the FAT and the
+ * bitmap to share the same allocation unit on flash media, thereby improving
+ * performance and endurance.
+ */
+static int exfat_pack_bitmap(const struct exfat_user_input *ui)
+{
+	unsigned int fat_byte_end = finfo.fat_byte_off + finfo.fat_byte_len,
+		bitmap_byte_len = finfo.bitmap_byte_len,
+		bitmap_clu_len = round_up(bitmap_byte_len, ui->cluster_size),
+		bitmap_clu_cnt, total_clu_cnt, new_bitmap_clu_len;
+
+	for (;;) {
+		bitmap_clu_cnt = bitmap_clu_len / ui->cluster_size;
+		if (finfo.clu_byte_off - bitmap_clu_len < fat_byte_end ||
+				finfo.total_clu_cnt > EXFAT_MAX_NUM_CLUSTER -
+					bitmap_clu_cnt)
+			return -1;
+		total_clu_cnt = finfo.total_clu_cnt + bitmap_clu_cnt;
+		bitmap_byte_len = round_up(total_clu_cnt, 8) / 8;
+		new_bitmap_clu_len = round_up(bitmap_byte_len, ui->cluster_size);
+		if (new_bitmap_clu_len == bitmap_clu_len) {
+			finfo.clu_byte_off -= bitmap_clu_len;
+			finfo.total_clu_cnt = total_clu_cnt;
+			finfo.bitmap_byte_off -= bitmap_clu_len;
+			finfo.bitmap_byte_len = bitmap_byte_len;
+			return 0;
+		}
+		bitmap_clu_len = new_bitmap_clu_len;
+	}
+}
+
 static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui)
 {
+	unsigned long long total_clu_cnt;
 	int clu_len;
 
 	if (ui->boundary_align < bd->sector_size) {
@@ -392,25 +434,27 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 				bd->sector_size);
 		return -1;
 	}
-	finfo.fat_byte_off = round_up(24 * bd->sector_size,
-			ui->boundary_align);
+	finfo.fat_byte_off = round_up(bd->offset + 24 * bd->sector_size,
+			ui->boundary_align) - bd->offset;
 	finfo.fat_byte_len = round_up((bd->num_clusters * sizeof(int)),
 		ui->cluster_size);
-	finfo.clu_byte_off = round_up(finfo.fat_byte_off + finfo.fat_byte_len,
-		ui->boundary_align);
+	finfo.clu_byte_off = round_up(bd->offset + finfo.fat_byte_off +
+		finfo.fat_byte_len, ui->boundary_align) - bd->offset;
 	if (bd->size <= finfo.clu_byte_off) {
 		exfat_err("boundary alignment is too big\n");
 		return -1;
 	}
-	finfo.total_clu_cnt = (bd->size - finfo.clu_byte_off) /
-		ui->cluster_size;
-	if (finfo.total_clu_cnt > EXFAT_MAX_NUM_CLUSTER) {
+	total_clu_cnt = (bd->size - finfo.clu_byte_off) / ui->cluster_size;
+	if (total_clu_cnt > EXFAT_MAX_NUM_CLUSTER) {
 		exfat_err("cluster size is too small\n");
 		return -1;
 	}
+	finfo.total_clu_cnt = (unsigned int) total_clu_cnt;
 
 	finfo.bitmap_byte_off = finfo.clu_byte_off;
 	finfo.bitmap_byte_len = round_up(finfo.total_clu_cnt, 8) / 8;
+	if (ui->pack_bitmap)
+		exfat_pack_bitmap(ui);
 	clu_len = round_up(finfo.bitmap_byte_len, ui->cluster_size);
 
 	finfo.ut_start_clu = EXFAT_FIRST_CLUSTER + clu_len / ui->cluster_size;
@@ -591,6 +635,9 @@ int main(int argc, char *argv[])
 				goto out;
 			}
 			ui.boundary_align = ret;
+			break;
+		case PACK_BITMAP:
+			ui.pack_bitmap = true;
 			break;
 		case 'f':
 			ui.quick = false;

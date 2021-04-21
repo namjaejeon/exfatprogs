@@ -4,6 +4,8 @@ fsck.exfat \- check an exFAT filesystem
 .SH SYNOPSIS
 .B fsck.exfat
 [
+.B \-a
+] [
 .B \-n
 ] [
 .B \-r
@@ -23,6 +25,9 @@ checks an exFAT filesystem and repairs the filesystem
 depending on the options passed.
 .PP
 .SH OPTIONS
+.TP
+.BI \-a
+This  option  does  the same thing as the -p option.  It is provided for backwards compatibility only;  it  is  suggested  that people use -p option whenever possible.
 .TP
 .BI \-n
 Check the filesystem but do not attempt to repair the filesystem.

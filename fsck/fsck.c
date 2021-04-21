@@ -87,6 +87,7 @@ static void usage(char *name)
 	fprintf(stderr, "\t-y | --repair-yes    Repair without ask\n");
 	fprintf(stderr, "\t-n | --repair-no     No repair\n");
 	fprintf(stderr, "\t-p | --repair-auto   Repair automatically\n");
+	fprintf(stderr, "\t-a                   Repair automatically\n");
 	fprintf(stderr, "\t-V | --version       Show version\n");
 	fprintf(stderr, "\t-v | --verbose       Print debug\n");
 	fprintf(stderr, "\t-h | --help          Show help\n");
@@ -735,6 +736,7 @@ static int restore_boot_region(struct exfat_blk_dev *bd)
 {
 	int i;
 	char *sector;
+	int ret;
 
 	sector = malloc(bd->sector_size);
 	if (!sector)
@@ -744,21 +746,31 @@ static int restore_boot_region(struct exfat_blk_dev *bd)
 		if (exfat_read(bd->dev_fd, sector, bd->sector_size,
 				BACKUP_BOOT_SEC_IDX * bd->sector_size +
 				i * bd->sector_size) !=
-				(ssize_t)bd->sector_size)
-			return -EIO;
+				(ssize_t)bd->sector_size) {
+			ret = -EIO;
+			goto free_sector;
+		}
 		if (i == 0)
 			((struct pbr *)sector)->bsx.perc_in_use = 0xff;
 
 		if (exfat_write(bd->dev_fd, sector, bd->sector_size,
 				BOOT_SEC_IDX * bd->sector_size +
 				i * bd->sector_size) !=
-				(ssize_t)bd->sector_size)
-			return -EIO;
+				(ssize_t)bd->sector_size) {
+			ret = -EIO;
+			goto free_sector;
+		}
 	}
-	if (fsync(bd->dev_fd))
-		return -EIO;
+
+	if (fsync(bd->dev_fd)) {
+		ret = -EIO;
+		goto free_sector;
+	}
+	ret = 0;
+
+free_sector:
 	free(sector);
-	return 0;
+	return ret;
 }
 
 static int exfat_boot_region_check(struct exfat *exfat, struct pbr **bs)
@@ -1465,7 +1477,7 @@ int main(int argc, char * const argv[])
 		exfat_err("failed to init locale/codeset\n");
 
 	opterr = 0;
-	while ((c = getopt_long(argc, argv, "rynpVvh", opts, NULL)) != EOF) {
+	while ((c = getopt_long(argc, argv, "arynpVvh", opts, NULL)) != EOF) {
 		switch (c) {
 		case 'n':
 			if (ui.options & FSCK_OPTS_REPAIR_ALL)
@@ -1482,6 +1494,7 @@ int main(int argc, char * const argv[])
 				usage(argv[0]);
 			ui.options |= FSCK_OPTS_REPAIR_YES;
 			break;
+		case 'a':
 		case 'p':
 			if (ui.options & FSCK_OPTS_REPAIR_ALL)
 				usage(argv[0]);
