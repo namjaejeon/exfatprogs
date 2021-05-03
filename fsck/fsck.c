@@ -958,8 +958,8 @@ static int check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 	return valid ? ret : -EINVAL;
 }
 
-static int read_file_dentries(struct exfat_de_iter *iter,
-			struct exfat_inode **new_node, int *skip_dentries)
+static int read_file_dentry_set(struct exfat_de_iter *iter,
+				struct exfat_inode **new_node, int *skip_dentries)
 {
 	struct exfat_dentry *file_de, *stream_de, *name_de;
 	struct exfat_inode *node;
@@ -1026,7 +1026,7 @@ static int read_file_dentries(struct exfat_de_iter *iter,
 	*new_node = node;
 	return 0;
 err:
-	*skip_dentries = 0;
+	*skip_dentries = 1;
 	*new_node = NULL;
 	free_exfat_inode(node);
 	return ret;
@@ -1040,7 +1040,7 @@ static int read_file(struct exfat_de_iter *de_iter,
 
 	*new_node = NULL;
 
-	ret = read_file_dentries(de_iter, &node, dentry_count);
+	ret = read_file_dentry_set(de_iter, &node, dentry_count);
 	if (ret)
 		return ret;
 
