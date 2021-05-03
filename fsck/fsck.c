@@ -480,19 +480,31 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 		/* This cluster is allocated or not */
 		if (get_next_clus(exfat, node, clus, &next))
 			goto truncate_file;
-		if (!node->is_contiguous) {
-			if (!heap_clus(exfat, next) &&
-					next != EXFAT_EOF_CLUSTER) {
+		if (next == EXFAT_BAD_CLUSTER) {
+			if (repair_file_ask(&exfat->de_iter, node,
+					    ER_FILE_INVALID_CLUS,
+					    "BAD cluster. truncate to %"
+					    PRIu64 " bytes",
+					    count * exfat->clus_size))
+				goto truncate_file;
+			else
+				return -EINVAL;
+		} else if (!node->is_contiguous) {
+			if (next != EXFAT_EOF_CLUSTER &&
+			    !heap_clus(exfat, next)) {
 				if (repair_file_ask(&exfat->de_iter, node,
 						ER_FILE_INVALID_CLUS,
-						"broken cluster chain. "
-						"truncate to %"
+						"broken cluster chain. truncate to %"
 						PRIu64 " bytes",
-						count * exfat->clus_size))
+						(count + 1) * exfat->clus_size)) {
+					count++;
+					prev = clus;
+					EXFAT_BITMAP_SET(exfat->alloc_bitmap,
+							 clus - EXFAT_FIRST_CLUSTER);
 					goto truncate_file;
-
-				else
+				} else {
 					return -EINVAL;
+				}
 			}
 		}
 
