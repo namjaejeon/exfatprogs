@@ -126,6 +126,8 @@ void exfat_bitmap_set_range(struct exfat *exfat, char *bitmap,
 			    clus_t start_clus, clus_t count);
 int exfat_bitmap_find_zero(struct exfat *exfat, char *bmap,
 			   clus_t start_clu, clus_t *next);
+int exfat_bitmap_find_one(struct exfat *exfat, char *bmap,
+			  clus_t start_clu, clus_t *next);
 
 void show_version(void);
 

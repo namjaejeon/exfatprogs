@@ -72,21 +72,17 @@ void exfat_free_ancestors(struct exfat_inode *child)
 {
 	struct exfat_inode *parent;
 
-	if (!list_empty(&child->children))
-		return;
-
-	do {
-		if (!(child->attr & ATTR_SUBDIR)) {
-			exfat_err("not directory.\n");
+	while (child && list_empty(&child->children)) {
+		if (!child->parent || !(child->attr & ATTR_SUBDIR))
 			return;
-		}
 
 		parent = child->parent;
 		list_del(&child->sibling);
 		exfat_free_inode(child);
 
 		child = parent;
-	} while (child && list_empty(&child->children));
+	}
+	return;
 }
 
 void exfat_free_dir_list(struct exfat *exfat)
@@ -94,6 +90,8 @@ void exfat_free_dir_list(struct exfat *exfat)
 	struct exfat_inode *dir, *i;
 
 	list_for_each_entry_safe(dir, i, &exfat->dir_list, list) {
+		if (!dir->parent)
+			continue;
 		exfat_free_file_children(dir);
 		list_del(&dir->list);
 		exfat_free_inode(dir);
@@ -109,6 +107,12 @@ void exfat_free_exfat(struct exfat *exfat)
 			free(exfat->alloc_bitmap);
 		if (exfat->disk_bitmap)
 			free(exfat->disk_bitmap);
+		if (exfat->ohead_bitmap)
+			free(exfat->ohead_bitmap);
+		if (exfat->upcase_table)
+			free(exfat->upcase_table);
+		if (exfat->root)
+			exfat_free_inode(exfat->root);
 		if (exfat->zero_cluster)
 			free(exfat->zero_cluster);
 		free(exfat);
@@ -138,7 +142,15 @@ struct exfat *exfat_alloc_exfat(struct exfat_blk_dev *blk_dev, struct pbr *bs)
 		goto err;
 	}
 
-	exfat->disk_bitmap = (char *)malloc(EXFAT_BITMAP_SIZE(exfat->clus_count));
+	exfat->ohead_bitmap =
+		calloc(1, EXFAT_BITMAP_SIZE(exfat->clus_count));
+	if (!exfat->ohead_bitmap) {
+		exfat_err("failed to allocate bitmap\n");
+		goto err;
+	}
+
+	exfat->disk_bitmap =
+		calloc(1, EXFAT_BITMAP_SIZE(exfat->clus_count));
 	if (!exfat->disk_bitmap) {
 		exfat_err("failed to allocate bitmap\n");
 		goto err;
