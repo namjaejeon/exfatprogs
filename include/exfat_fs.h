@@ -7,17 +7,20 @@
 
 #include "list.h"
 
+struct exfat_dentry;
+
 struct exfat_inode {
 	struct exfat_inode	*parent;
 	struct list_head	children;
 	struct list_head	sibling;
 	struct list_head	list;
 	clus_t			first_clus;
-	clus_t			last_lclus;
-	clus_t			last_pclus;
 	__u16			attr;
 	uint64_t		size;
 	bool			is_contiguous;
+	struct exfat_dentry	*dentry_set;
+	int			dentry_count;
+	off_t			dev_offset;
 	__le16			name[0];	/* only for directory */
 };
 
@@ -38,6 +41,14 @@ struct exfat {
 	clus_t			disk_bitmap_clus;
 	unsigned int		disk_bitmap_size;
 	__u16			*upcase_table;
+	clus_t			start_clu;
+	char			*zero_cluster;
+};
+
+struct exfat_dentry_loc {
+	struct exfat_inode	*parent;
+	off_t			file_offset;
+	off_t			dev_offset;
 };
 
 struct path_resolve_ctx {

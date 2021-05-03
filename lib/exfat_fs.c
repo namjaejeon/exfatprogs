@@ -31,13 +31,14 @@ struct exfat_inode *exfat_alloc_inode(__u16 attr)
 	INIT_LIST_HEAD(&node->sibling);
 	INIT_LIST_HEAD(&node->list);
 
-	node->last_pclus = EXFAT_EOF_CLUSTER;
 	node->attr = attr;
 	return node;
 }
 
 void exfat_free_inode(struct exfat_inode *node)
 {
+	if (node->dentry_set)
+		free(node->dentry_set);
 	free(node);
 }
 
@@ -108,6 +109,8 @@ void exfat_free_exfat(struct exfat *exfat)
 			free(exfat->alloc_bitmap);
 		if (exfat->disk_bitmap)
 			free(exfat->disk_bitmap);
+		if (exfat->zero_cluster)
+			free(exfat->zero_cluster);
 		free(exfat);
 	}
 }
@@ -141,6 +144,13 @@ struct exfat *exfat_alloc_exfat(struct exfat_blk_dev *blk_dev, struct pbr *bs)
 		goto err;
 	}
 
+	exfat->zero_cluster = calloc(1, exfat->clus_size);
+	if (!exfat->zero_cluster) {
+		exfat_err("failed to allocate a zero-filled cluster buffer\n");
+		goto err;
+	}
+
+	exfat->start_clu = EXFAT_FIRST_CLUSTER;
 	return exfat;
 err:
 	exfat_free_exfat(exfat);

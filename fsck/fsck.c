@@ -532,38 +532,20 @@ restore:
 	return ret;
 }
 
-static void dentry_calc_checksum(struct exfat_dentry *dentry,
-				__le16 *checksum, bool primary)
+static uint16_t file_calc_checksum(struct exfat_de_iter *iter)
 {
-	unsigned int i;
-	uint8_t *bytes;
-
-	bytes = (uint8_t *)dentry;
-
-	*checksum = ((*checksum << 15) | (*checksum >> 1)) + bytes[0];
-	*checksum = ((*checksum << 15) | (*checksum >> 1)) + bytes[1];
-
-	i = primary ? 4 : 2;
-	for (; i < sizeof(*dentry); i++) {
-		*checksum = ((*checksum << 15) | (*checksum >> 1)) + bytes[i];
-	}
-}
-
-static __le16 file_calc_checksum(struct exfat_de_iter *iter)
-{
-	__le16 checksum;
+	uint16_t checksum;
 	struct exfat_dentry *file_de, *de;
 	int i;
 
 	checksum = 0;
 	exfat_de_iter_get(iter, 0, &file_de);
 
-	dentry_calc_checksum(file_de, &checksum, true);
+	exfat_calc_dentry_checksum(file_de, &checksum, true);
 	for (i = 1; i <= file_de->file_num_ext; i++) {
 		exfat_de_iter_get(iter, i, &de);
-		dentry_calc_checksum(de, &checksum, false);
+		exfat_calc_dentry_checksum(de, &checksum, false);
 	}
-
 	return checksum;
 }
 

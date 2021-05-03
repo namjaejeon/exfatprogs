@@ -116,8 +116,16 @@ static inline void exfat_bitmap_set(char *bmap, clus_t c)
 	(((bitmap_t *)(bmap))[BIT_ENTRY(cc)] |= BIT_MASK(cc));
 }
 
+static inline void exfat_bitmap_clear(char *bmap, clus_t c)
+{
+	clus_t cc = c - EXFAT_FIRST_CLUSTER;
+	(((bitmap_t *)(bmap))[BIT_ENTRY(cc)] &= ~BIT_MASK(cc));
+}
+
 void exfat_bitmap_set_range(struct exfat *exfat, char *bitmap,
 			    clus_t start_clus, clus_t count);
+int exfat_bitmap_find_zero(struct exfat *exfat, char *bmap,
+			   clus_t start_clu, clus_t *next);
 
 void show_version(void);
 

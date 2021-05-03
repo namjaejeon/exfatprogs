@@ -8,6 +8,7 @@
 
 struct exfat;
 struct exfat_inode;
+struct exfat_dentry_loc;
 struct buffer_desc;
 
 struct exfat_de_iter {
@@ -60,7 +61,22 @@ int exfat_lookup_dentry_set(struct exfat *exfat, struct exfat_inode *parent,
 			    struct exfat_lookup_filter *filter);
 int exfat_lookup_file(struct exfat *exfat, struct exfat_inode *parent,
 		      const char *name, struct exfat_lookup_filter *filter_out);
+
 int exfat_create_file(struct exfat *exfat, struct exfat_inode *parent,
 		      const char *name, unsigned short attr);
+int exfat_update_file_dentry_set(struct exfat *exfat,
+				 struct exfat_dentry *dset, int dcount,
+				 const char *name,
+				 clus_t start_clu, clus_t ccount);
+int exfat_build_file_dentry_set(struct exfat *exfat, const char *name,
+				unsigned short attr, struct exfat_dentry **dentry_set,
+				int *dentry_count);
+int exfat_add_dentry_set(struct exfat *exfat, struct exfat_dentry_loc *loc,
+			 struct exfat_dentry *dset, int dcount,
+			 bool need_next_loc);
+void exfat_calc_dentry_checksum(struct exfat_dentry *dentry,
+				uint16_t *checksum, bool primary);
+uint16_t exfat_calc_name_hash(struct exfat *exfat,
+			      __le16 *name, int len);
 
 #endif
