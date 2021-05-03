@@ -37,10 +37,11 @@ struct exfat_lookup_filter {
 	struct {
 		struct exfat_dentry	*dentry_set;
 		int			dentry_count;
+		off_t			file_offset;
 		/* device offset where the dentry_set locates, or
 		 * the empty slot locates or EOF if not found.
 		 */
-		off_t			dentry_d_offset;
+		off_t			dev_offset;
 	} out;
 };
 
@@ -53,6 +54,7 @@ int exfat_de_iter_get_dirty(struct exfat_de_iter *iter,
 int exfat_de_iter_flush(struct exfat_de_iter *iter);
 int exfat_de_iter_advance(struct exfat_de_iter *iter, int skip_dentries);
 off_t exfat_de_iter_device_offset(struct exfat_de_iter *iter);
+off_t exfat_de_iter_file_offset(struct exfat_de_iter *iter);
 
 int exfat_lookup_dentry_set(struct exfat *exfat, struct exfat_inode *parent,
 			    struct exfat_lookup_filter *filter);

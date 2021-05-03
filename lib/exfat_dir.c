@@ -231,6 +231,10 @@ int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 
 	iter->buffer_desc = bd;
 
+	iter->de_file_offset = 0;
+	iter->next_read_offset = iter->read_size;
+	iter->max_skip_dentries = 0;
+
 	if (iter->parent->size == 0)
 		return EOF;
 
@@ -240,9 +244,6 @@ int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 		return -EIO;
 	}
 
-	iter->de_file_offset = 0;
-	iter->next_read_offset = iter->read_size;
-	iter->max_skip_dentries = 0;
 	return 0;
 }
 
@@ -333,6 +334,11 @@ off_t exfat_de_iter_device_offset(struct exfat_de_iter *iter)
 		iter->de_file_offset % iter->read_size;
 }
 
+off_t exfat_de_iter_file_offset(struct exfat_de_iter *iter)
+{
+	return iter->de_file_offset;
+}
+
 /*
  * try to find the dentry set matched with @filter. this function
  * doesn't verify the dentry set.
@@ -344,7 +350,7 @@ int exfat_lookup_dentry_set(struct exfat *exfat, struct exfat_inode *parent,
 {
 	struct buffer_desc *bd = NULL;
 	struct exfat_dentry *dentry = NULL;
-	off_t free_offset = 0;
+	off_t free_file_offset = 0, free_dev_offset = 0;
 	struct exfat_de_iter de_iter;
 	int dentry_count;
 	int retval;
@@ -401,7 +407,10 @@ int exfat_lookup_dentry_set(struct exfat *exfat, struct exfat_inode *parent,
 		} else if ((dentry->type == EXFAT_LAST ||
 			    IS_EXFAT_DELETED(dentry->type))) {
 			if (!last_is_free) {
-				free_offset = exfat_de_iter_device_offset(&de_iter);
+				free_file_offset =
+					exfat_de_iter_file_offset(&de_iter);
+				free_dev_offset =
+					exfat_de_iter_device_offset(&de_iter);
 				last_is_free = true;
 			}
 		} else {
@@ -412,13 +421,18 @@ int exfat_lookup_dentry_set(struct exfat *exfat, struct exfat_inode *parent,
 	}
 
 out:
-	if (retval == 0)
-		filter->out.dentry_d_offset =
+	if (retval == 0) {
+		filter->out.file_offset =
+			exfat_de_iter_file_offset(&de_iter);
+		filter->out.dev_offset =
 			exfat_de_iter_device_offset(&de_iter);
-	else if (retval == EOF && last_is_free)
-		filter->out.dentry_d_offset = free_offset;
-	else
-		filter->out.dentry_d_offset = EOF;
+	} else if (retval == EOF && last_is_free) {
+		filter->out.file_offset = free_file_offset;
+		filter->out.dev_offset = free_dev_offset;
+	} else {
+		filter->out.file_offset = exfat_de_iter_file_offset(&de_iter);
+		filter->out.dev_offset = EOF;
+	}
 	if (bd)
 		exfat_free_buffer(bd, 2);
 	return retval;
@@ -609,7 +623,7 @@ int exfat_create_file(struct exfat *exfat, struct exfat_inode *parent,
 	if (retval < 0)
 		return retval;
 
-	retval = exfat_o2c(exfat, filter.out.dentry_d_offset, &clu, &offset);
+	retval = exfat_o2c(exfat, filter.out.dev_offset, &clu, &offset);
 	if (retval)
 		goto out;
 
@@ -620,7 +634,7 @@ int exfat_create_file(struct exfat *exfat, struct exfat_inode *parent,
 	}
 
 	if (exfat_write(exfat->blk_dev->dev_fd, dentry_set,
-			set_len, filter.out.dentry_d_offset) !=
+			set_len, filter.out.dev_offset) !=
 	    (ssize_t)set_len) {
 		retval = -EIO;
 		goto out;
