@@ -110,12 +110,12 @@ static int exfat_write_boot_sector(struct exfat_blk_dev *bd,
 	if (is_backup)
 		sec_idx += BACKUP_BOOT_SEC_IDX;
 
-	ppbr = malloc(sizeof(struct pbr));
+	ppbr = malloc(bd->sector_size);
 	if (!ppbr) {
 		exfat_err("Cannot allocate pbr: out of memory\n");
 		return -1;
 	}
-	memset(ppbr, 0, sizeof(struct pbr));
+	memset(ppbr, 0, bd->sector_size);
 
 	exfat_setup_boot_sector(ppbr, bd, ui);
 
@@ -127,7 +127,7 @@ static int exfat_write_boot_sector(struct exfat_blk_dev *bd,
 		goto free_ppbr;
 	}
 
-	boot_calc_checksum((unsigned char *)ppbr, sizeof(struct pbr),
+	boot_calc_checksum((unsigned char *)ppbr, bd->sector_size,
 		true, checksum);
 
 free_ppbr:
@@ -138,26 +138,36 @@ free_ppbr:
 static int exfat_write_extended_boot_sectors(struct exfat_blk_dev *bd,
 		unsigned int *checksum, bool is_backup)
 {
-	struct exbs eb;
+	char *peb;
+	__le16 *peb_signature;
+	int ret = 0;
 	int i;
 	unsigned int sec_idx = EXBOOT_SEC_IDX;
+
+	peb = malloc(bd->sector_size);
+	if (!peb)
+		return -1;
 
 	if (is_backup)
 		sec_idx += BACKUP_BOOT_SEC_IDX;
 
-	memset(&eb, 0, sizeof(struct exbs));
-	eb.signature = cpu_to_le16(PBR_SIGNATURE);
+	memset(peb, 0, bd->sector_size);
+	peb_signature = (__le16*) (peb + bd->sector_size - 2);
+	*peb_signature = cpu_to_le16(PBR_SIGNATURE);
 	for (i = 0; i < EXBOOT_SEC_NUM; i++) {
-		if (exfat_write_sector(bd, &eb, sec_idx++)) {
+		if (exfat_write_sector(bd, peb, sec_idx++)) {
 			exfat_err("extended boot sector write failed\n");
-			return -1;
+			ret = -1;
+			goto free_peb;
 		}
 
-		boot_calc_checksum((unsigned char *) &eb, sizeof(struct exbs),
+		boot_calc_checksum((unsigned char *) peb, bd->sector_size,
 			false, checksum);
 	}
 
-	return 0;
+free_peb:
+	free(peb);
+	return ret;
 }
 
 static int exfat_write_oem_sector(struct exfat_blk_dev *bd,

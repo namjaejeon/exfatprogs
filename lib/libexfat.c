@@ -559,7 +559,6 @@ static int exfat_update_boot_checksum(struct exfat_blk_dev *bd, bool is_backup)
 {
 	unsigned int checksum = 0;
 	int ret, sec_idx, backup_sec_idx = 0;
-	int sector_size = bd->sector_size;
 	unsigned char *buf;
 
 	buf = malloc(bd->sector_size);
@@ -581,13 +580,10 @@ static int exfat_update_boot_checksum(struct exfat_blk_dev *bd, bool is_backup)
 			goto free_buf;
 		}
 
-		if (sec_idx == BOOT_SEC_IDX) {
+		if (sec_idx == BOOT_SEC_IDX)
 			is_boot_sec = true;
-			sector_size = sizeof(struct pbr);
-		} else if (sec_idx >= EXBOOT_SEC_IDX && sec_idx < OEM_SEC_IDX)
-			sector_size = sizeof(struct exbs);
 
-		boot_calc_checksum(buf, sector_size, is_boot_sec,
+		boot_calc_checksum(buf, bd->sector_size, is_boot_sec,
 			&checksum);
 	}
 
