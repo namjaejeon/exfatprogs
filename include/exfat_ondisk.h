@@ -131,17 +131,6 @@ struct pbr {
 	__le16 signature;
 };
 
-/* Extended Boot Sector */
-struct exbs {
-	__u8 zero[510];
-	__le16 signature;
-};
-
-/* Extended Boot Record (8 sectors) */
-struct expbr {
-	struct exbs eb[8];
-};
-
 #define VOLUME_LABEL_MAX_LEN	11
 #define ENTRY_NAME_MAX		15
 
