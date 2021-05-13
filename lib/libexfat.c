@@ -528,8 +528,7 @@ free:
 	return ret;
 }
 
-int exfat_show_volume_serial(struct exfat_blk_dev *bd,
-		struct exfat_user_input *ui)
+int exfat_show_volume_serial(struct exfat_blk_dev *bd)
 {
 	struct pbr *ppbr;
 	int ret;
