@@ -358,26 +358,27 @@ off_t exfat_get_root_entry_offset(struct exfat_blk_dev *bd)
 {
 	struct pbr *bs;
 	int nbytes;
-	unsigned int cluster_size;
+	unsigned int cluster_size, sector_size;
 	off_t root_clu_off;
 
-	bs = (struct pbr *)malloc(sizeof(struct pbr));
+	bs = (struct pbr *)malloc(EXFAT_MAX_SECTOR_SIZE);
 	if (!bs) {
 		exfat_err("failed to allocate memory\n");
 		return -ENOMEM;
 	}
 
-	nbytes = exfat_read(bd->dev_fd, bs, sizeof(struct pbr), 0);
-	if (nbytes != sizeof(struct pbr)) {
+	nbytes = exfat_read(bd->dev_fd, bs, EXFAT_MAX_SECTOR_SIZE, 0);
+	if (nbytes != EXFAT_MAX_SECTOR_SIZE) {
 		exfat_err("boot sector read failed: %d\n", errno);
 		free(bs);
 		return -1;
 	}
 
-	cluster_size = (1 << bs->bsx.sect_per_clus_bits) * bd->sector_size;
-	root_clu_off = le32_to_cpu(bs->bsx.clu_offset) * bd->sector_size +
-		le32_to_cpu(bs->bsx.root_cluster - EXFAT_RESERVED_CLUSTERS)
-		* cluster_size;
+	sector_size = 1 << bs->bsx.sect_size_bits;
+	cluster_size = (1 << bs->bsx.sect_per_clus_bits) * sector_size;
+	root_clu_off = le32_to_cpu(bs->bsx.clu_offset) * sector_size +
+		le32_to_cpu(bs->bsx.root_cluster - EXFAT_RESERVED_CLUSTERS) *
+		cluster_size;
 	free(bs);
 
 	return root_clu_off;
@@ -528,19 +529,19 @@ free:
 	return ret;
 }
 
-int exfat_show_volume_serial(struct exfat_blk_dev *bd)
+int exfat_show_volume_serial(int fd)
 {
 	struct pbr *ppbr;
 	int ret;
 
-	ppbr = malloc(bd->sector_size);
+	ppbr = malloc(EXFAT_MAX_SECTOR_SIZE);
 	if (!ppbr) {
 		exfat_err("Cannot allocate pbr: out of memory\n");
 		return -1;
 	}
 
 	/* read main boot sector */
-	ret = exfat_read_sector(bd, (char *)ppbr, BOOT_SEC_IDX);
+	ret = exfat_read(fd, (char *)ppbr, EXFAT_MAX_SECTOR_SIZE, 0);
 	if (ret < 0) {
 		exfat_err("main boot sector read failed\n");
 		ret = -1;
@@ -600,20 +601,22 @@ int exfat_set_volume_serial(struct exfat_blk_dev *bd,
 	int ret;
 	struct pbr *ppbr;
 
-	ppbr = malloc(bd->sector_size);
+	ppbr = malloc(EXFAT_MAX_SECTOR_SIZE);
 	if (!ppbr) {
 		exfat_err("Cannot allocate pbr: out of memory\n");
 		return -1;
 	}
 
 	/* read main boot sector */
-	ret = exfat_read_sector(bd, (char *)ppbr, BOOT_SEC_IDX);
+	ret = exfat_read(bd->dev_fd, (char *)ppbr, EXFAT_MAX_SECTOR_SIZE,
+			BOOT_SEC_IDX);
 	if (ret < 0) {
 		exfat_err("main boot sector read failed\n");
 		ret = -1;
 		goto free_ppbr;
 	}
 
+	bd->sector_size = 1 << ppbr->bsx.sect_size_bits;
 	ppbr->bsx.vol_serial = ui->volume_serial;
 
 	/* update main boot sector */
