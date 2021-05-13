@@ -196,7 +196,7 @@ int exfat_get_blk_dev_info(struct exfat_user_input *ui,
 	if (ioctl(fd, BLKSSZGET, &bd->sector_size) < 0)
 		bd->sector_size = DEFAULT_SECTOR_SIZE;
 	bd->sector_size_bits = sector_size_bits(bd->sector_size);
-	bd->num_sectors = blk_dev_size / DEFAULT_SECTOR_SIZE;
+	bd->num_sectors = blk_dev_size / bd->sector_size;
 	bd->num_clusters = blk_dev_size / ui->cluster_size;
 
 	exfat_debug("Block device name : %s\n", ui->dev_name);
