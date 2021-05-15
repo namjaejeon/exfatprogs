@@ -43,6 +43,8 @@
 #define EXFAT_GET_VOLUME_SERIAL		0x03
 #define EXFAT_SET_VOLUME_SERIAL		0x04
 
+#define EXFAT_MAX_SECTOR_SIZE		4096
+
 enum {
 	BOOT_SEC_IDX = 0,
 	EXBOOT_SEC_IDX,
@@ -107,7 +109,7 @@ int exfat_write_sector(struct exfat_blk_dev *bd, void *buf,
 int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
 		unsigned int checksum, bool is_backup);
 char *exfat_conv_volume_label(struct exfat_dentry *vol_entry);
-int exfat_show_volume_serial(struct exfat_blk_dev *bd);
+int exfat_show_volume_serial(int fd);
 int exfat_set_volume_serial(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui);
 unsigned int exfat_clus_to_blk_dev_off(struct exfat_blk_dev *bd,
