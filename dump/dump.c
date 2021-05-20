@@ -76,15 +76,15 @@ static int exfat_show_ondisk_all_info(struct exfat_blk_dev *bd)
 	unsigned char *bitmap;
 	char *volume_label;
 
-	ppbr = malloc(bd->sector_size);
+	ppbr = malloc(EXFAT_MAX_SECTOR_SIZE);
 	if (!ppbr) {
 		exfat_err("Cannot allocate pbr: out of memory\n");
 		return -ENOMEM;
 	}
 
 	/* read main boot sector */
-	ret = exfat_read_sector(bd, (char *)ppbr, BOOT_SEC_IDX);
-	if (ret < 0) {
+	if (exfat_read(bd->dev_fd, (char *)ppbr, EXFAT_MAX_SECTOR_SIZE,
+			0) != (ssize_t)EXFAT_MAX_SECTOR_SIZE) {
 		exfat_err("main boot sector read failed\n");
 		ret = -EIO;
 		goto free_ppbr;
@@ -107,12 +107,8 @@ static int exfat_show_ondisk_all_info(struct exfat_blk_dev *bd)
 		goto free_ppbr;
 	}
 
-	if (bd->sector_size != 1 << pbsx->sect_size_bits) {
-		exfat_err("bogus sector size : %u (sector size bits : %u)\n",
-				bd->sector_size, pbsx->sect_size_bits);
-		ret = -EINVAL;
-		goto free_ppbr;
-	}
+	bd->sector_size_bits = pbsx->sect_size_bits;
+	bd->sector_size = 1 << pbsx->sect_size_bits;
 
 	clu_offset = le32_to_cpu(pbsx->clu_offset);
 	total_clus = le32_to_cpu(pbsx->clu_count);

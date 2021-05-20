@@ -1,3 +1,14 @@
+exfatprogs 1.1.2 - released 2021-05-20
+======================================
+
+CHANGES :
+ * mkfs.exfat: set 0x80 to DriveSelect of the boot sector
+
+BUG FIXES :
+ * Fix issues on 4KB logical sector devices
+ * Fix issues when the sector size of of a file system is different from
+   that of a block device.
+
 exfatprogs 1.1.1 - released 2021-04-21
 ======================================
 

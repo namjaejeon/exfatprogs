@@ -102,7 +102,7 @@ int main(int argc, char *argv[])
 
 	/* Mode to change or display volume serial */
 	if (flags == EXFAT_GET_VOLUME_SERIAL) {
-		ret = exfat_show_volume_serial(&bd, &ui);
+		ret = exfat_show_volume_serial(bd.dev_fd);
 		goto close_fd_out;
 	} else if (flags == EXFAT_SET_VOLUME_SERIAL) {
 		ret = exfat_set_volume_serial(&bd, &ui);
