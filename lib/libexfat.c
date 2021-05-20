@@ -377,7 +377,7 @@ off_t exfat_get_root_entry_offset(struct exfat_blk_dev *bd)
 	sector_size = 1 << bs->bsx.sect_size_bits;
 	cluster_size = (1 << bs->bsx.sect_per_clus_bits) * sector_size;
 	root_clu_off = le32_to_cpu(bs->bsx.clu_offset) * sector_size +
-		le32_to_cpu(bs->bsx.root_cluster - EXFAT_RESERVED_CLUSTERS) *
+		(le32_to_cpu(bs->bsx.root_cluster) - EXFAT_RESERVED_CLUSTERS) *
 		cluster_size;
 	free(bs);
 
