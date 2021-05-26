@@ -89,9 +89,13 @@ static void usage(char *name)
 
 #define repair_file_ask(iter, inode, code, fmt, ...)	\
 ({							\
-		exfat_resolve_path_parent(&path_resolve_ctx,	\
-				(iter)->parent, inode);	\
-		exfat_repair_ask(&exfat_fsck, code,	\
+		if (inode)						\
+			exfat_resolve_path_parent(&path_resolve_ctx,	\
+					    (iter)->parent, inode);	\
+		else							\
+			exfat_resolve_path(&path_resolve_ctx,		\
+				     (iter)->parent);			\
+		exfat_repair_ask(&exfat_fsck, code,			\
 				 "ERROR: %s: " fmt " at %#" PRIx64,	\
 				 path_resolve_ctx.local_path,		\
 				 ##__VA_ARGS__,				\
@@ -951,18 +955,27 @@ static int read_children(struct exfat_fsck *fsck, struct exfat_inode *dir)
 			} else
 				exfat_free_inode(node);
 			break;
+		case EXFAT_LAST:
+			goto out;
 		case EXFAT_VOLUME:
 		case EXFAT_BITMAP:
 		case EXFAT_UPCASE:
-			break;
-		case EXFAT_LAST:
-			goto out;
+			if (dir == exfat->root)
+				break;
+			/* fallthrough */
 		default:
 			if (IS_EXFAT_DELETED(dentry->type))
 				break;
-			exfat_err("unknown entry type. 0x%x\n", dentry->type);
-			ret = -EINVAL;
-			goto err;
+			if (repair_file_ask(de_iter, NULL, ER_DE_UNKNOWN,
+					    "unknown entry type %#x at %07" PRIx64,
+					    dentry->type,
+					    exfat_de_iter_file_offset(de_iter))) {
+				struct exfat_dentry *dentry;
+
+				exfat_de_iter_get_dirty(de_iter, 0, &dentry);
+				dentry->type &= EXFAT_DELETE;
+			}
+			break;
 		}
 
 		exfat_de_iter_advance(de_iter, dentry_count);
