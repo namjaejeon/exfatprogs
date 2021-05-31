@@ -35,8 +35,13 @@ script:
  - i=1;while [ $i -le 10000 ];do sudo touch file$i;if [ $? != 0 ]; then exit 1; fi; i=$(($i + 1));done
  - sync
  - sudo rm -rf *
- - i=1;while [ $i -le 10000 ];do sudo mkdir file$i;if [ $? != 0 ]; then exit 1; fi; i=$(($i + 1));done
+ - i=1;while [ $i -le 10000 ];do sudo mkdir dir$i;if [ $? != 0 ]; then exit 1; fi; i=$(($i + 1));done
  - sync
  - sudo rm -rf *
+ - i=1;while [ $i -le 10000 ];do sudo touch file$i;if [ $? != 0 ]; then exit 1; fi; i=$(($i + 1));done
+ - i=1;while [ $i -le 10000 ];do sudo mkdir dir$i;if [ $? != 0 ]; then exit 1; fi; i=$(($i + 1));done
+ - sync
+ - sudo fsck.exfat /dev/loop22
+ - sudo find . -delete
  - sudo fsck.exfat /dev/loop22
  - cd -
