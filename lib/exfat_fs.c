@@ -263,7 +263,7 @@ int exfat_resolve_path(struct path_resolve_ctx *ctx, struct exfat_inode *child)
 		utf16_path++;
 	}
 
-	if (depth > 0)
+	if (depth > 1)
 		utf16_path--;
 	memcpy((char *)utf16_path, &utf16_null, sizeof(utf16_null));
 	utf16_path++;

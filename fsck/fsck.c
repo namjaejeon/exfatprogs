@@ -90,9 +90,10 @@ static void usage(char *name)
 		exfat_resolve_path_parent(&path_resolve_ctx,	\
 				(iter)->parent, inode);	\
 		exfat_repair_ask(&exfat_fsck, code,	\
-			"ERROR: %s: " fmt,		\
-			path_resolve_ctx.local_path,	\
-			##__VA_ARGS__);			\
+				 "ERROR: %s: " fmt " at %#" PRIx64,	\
+				 path_resolve_ctx.local_path,		\
+				 ##__VA_ARGS__,				\
+				 exfat_de_iter_device_offset(iter));	\
 })
 
 static int check_clus_chain(struct exfat_de_iter *de_iter,
@@ -115,7 +116,9 @@ static int check_clus_chain(struct exfat_de_iter *de_iter,
 	if ((node->size == 0 && node->first_clus != EXFAT_FREE_CLUSTER) ||
 	    (node->size > 0 && !exfat_heap_clus(exfat, node->first_clus))) {
 		if (repair_file_ask(de_iter, node,
-				    ER_FILE_FIRST_CLUS, "first cluster is wrong"))
+				    ER_FILE_FIRST_CLUS,
+				    "size %#" PRIx64 ", but the first cluster %#x",
+				    node->size, node->first_clus))
 			goto truncate_file;
 		else
 			return -EINVAL;
@@ -575,7 +578,7 @@ static int check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 
 	if (node->size == 0 && node->is_contiguous) {
 		if (repair_file_ask(iter, node, ER_FILE_ZERO_NOFAT,
-				"empty, but has no Fat chain\n")) {
+				"empty, but has no Fat chain")) {
 			exfat_de_iter_get_dirty(iter, 1, &dentry);
 			dentry->stream_flags &= ~EXFAT_SF_CONTIGUOUS;
 			ret = 1;
