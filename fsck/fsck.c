@@ -603,36 +603,87 @@ static int check_inode(struct exfat_de_iter *iter, struct exfat_inode *node)
 	checksum = file_calc_checksum(iter);
 	exfat_de_iter_get(iter, 0, &dentry);
 	if (checksum != le16_to_cpu(dentry->file_checksum)) {
-		if (repair_file_ask(iter, node, ER_DE_CHECKSUM,
-				"the checksum of a file is wrong")) {
-			exfat_de_iter_get_dirty(iter, 0, &dentry);
-			dentry->file_checksum = cpu_to_le16(checksum);
-			ret = 1;
-		} else
-			valid = false;
+		exfat_de_iter_get_dirty(iter, 0, &dentry);
+		dentry->file_checksum = cpu_to_le16(checksum);
+		ret = 1;
 	}
 
 	return valid ? ret : -EINVAL;
 }
 
+static int check_name_dentry_set(struct exfat_de_iter *iter,
+				 struct exfat_inode *inode)
+{
+	struct exfat_dentry *stream_de;
+	size_t name_len;
+	__u16 hash;
+
+	exfat_de_iter_get(iter, 1, &stream_de);
+
+	name_len = exfat_utf16_len(inode->name, NAME_BUFFER_SIZE);
+	if (stream_de->stream_name_len != name_len) {
+		if (repair_file_ask(iter, NULL, ER_DE_NAME_LEN,
+				    "the name length of a file is wrong")) {
+			exfat_de_iter_get_dirty(iter, 1, &stream_de);
+			stream_de->stream_name_len = (__u8)name_len;
+		} else {
+			return -EINVAL;
+		}
+	}
+
+	hash = exfat_calc_name_hash(iter->exfat, inode->name, (int)name_len);
+	if (cpu_to_le16(hash) != stream_de->stream_name_hash) {
+		if (repair_file_ask(iter, NULL, ER_DE_NAME_HASH,
+				    "the name hash of a file is wrong")) {
+			exfat_de_iter_get_dirty(iter, 1, &stream_de);
+			stream_de->stream_name_hash = cpu_to_le16(hash);
+		} else {
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
 static int read_file_dentry_set(struct exfat_de_iter *iter,
 				struct exfat_inode **new_node, int *skip_dentries)
 {
-	struct exfat_dentry *file_de, *stream_de, *name_de;
-	struct exfat_inode *node;
+	struct exfat_dentry *file_de, *stream_de, *dentry;
+	struct exfat_inode *node = NULL;
 	int i, ret;
-
-	/* TODO: mtime, atime, ... */
+	bool need_delete = false;
+	uint16_t checksum;
 
 	ret = exfat_de_iter_get(iter, 0, &file_de);
 	if (ret || file_de->type != EXFAT_FILE) {
-		exfat_err("failed to get file dentry. %d\n", ret);
+		exfat_err("failed to get file dentry\n");
 		return -EINVAL;
 	}
+
+	checksum = file_calc_checksum(iter);
+	if (checksum != le16_to_cpu(file_de->file_checksum)) {
+		if (repair_file_ask(iter, NULL, ER_DE_CHECKSUM,
+				    "the checksum of a file is wrong"))
+			need_delete = true;
+		*skip_dentries = 1;
+		goto skip_dset;
+	}
+
+	if (file_de->file_num_ext < 2) {
+		if (repair_file_ask(iter, NULL, ER_DE_SECONDARY_COUNT,
+				    "a file has too few secondary count. %d",
+				    file_de->file_num_ext))
+			need_delete = true;
+		*skip_dentries = 1;
+		goto skip_dset;
+	}
+
 	ret = exfat_de_iter_get(iter, 1, &stream_de);
 	if (ret || stream_de->type != EXFAT_STREAM) {
-		exfat_err("failed to get stream dentry. %d\n", ret);
-		return -EINVAL;
+		if (repair_file_ask(iter, NULL, ER_DE_STREAM,
+				    "failed to get stream dentry"))
+			need_delete = true;
+		*skip_dentries = 2;
+		goto skip_dset;
 	}
 
 	*new_node = NULL;
@@ -640,24 +691,28 @@ static int read_file_dentry_set(struct exfat_de_iter *iter,
 	if (!node)
 		return -ENOMEM;
 
-	if (file_de->file_num_ext < 2) {
-		exfat_err("too few secondary count. %d\n",
-				file_de->file_num_ext);
-		exfat_free_inode(node);
-		return -EINVAL;
-	}
-
 	for (i = 2; i <= file_de->file_num_ext; i++) {
-		ret = exfat_de_iter_get(iter, i, &name_de);
-		if (ret || name_de->type != EXFAT_NAME) {
-			exfat_err("failed to get name dentry. %d\n", ret);
-			ret = -EINVAL;
-			goto err;
+		ret = exfat_de_iter_get(iter, i, &dentry);
+		if (ret || dentry->type != EXFAT_NAME) {
+			if (i > 2 && repair_file_ask(iter, NULL, ER_DE_NAME,
+						     "failed to get name dentry")) {
+				exfat_de_iter_get_dirty(iter, 0, &file_de);
+				file_de->file_num_ext = i - 1;
+				break;
+			}
+			*skip_dentries = i + 1;
+			goto skip_dset;
 		}
 
 		memcpy(node->name +
-			(i-2) * ENTRY_NAME_MAX, name_de->name_unicode,
-			sizeof(name_de->name_unicode));
+		       (i - 2) * ENTRY_NAME_MAX, dentry->name_unicode,
+		       sizeof(dentry->name_unicode));
+	}
+
+	ret = check_name_dentry_set(iter, node);
+	if (ret) {
+		*skip_dentries = file_de->file_num_ext + 1;
+		goto skip_dset;
 	}
 
 	node->first_clus = le32_to_cpu(stream_de->stream_start_clu);
@@ -666,27 +721,41 @@ static int read_file_dentry_set(struct exfat_de_iter *iter,
 	node->size = le64_to_cpu(stream_de->stream_size);
 
 	if (node->size < le64_to_cpu(stream_de->stream_valid_size)) {
+		*skip_dentries = file_de->file_num_ext + 1;
 		if (repair_file_ask(iter, node, ER_FILE_VALID_SIZE,
-			"valid size %" PRIu64 " greater than size %" PRIu64,
-			le64_to_cpu(stream_de->stream_valid_size),
-			node->size)) {
+				    "valid size %" PRIu64 " greater than size %" PRIu64,
+				    le64_to_cpu(stream_de->stream_valid_size),
+				    node->size)) {
 			exfat_de_iter_get_dirty(iter, 1, &stream_de);
 			stream_de->stream_valid_size =
 					stream_de->stream_size;
 		} else {
-			ret = -EINVAL;
-			goto err;
+			*skip_dentries = file_de->file_num_ext + 1;
+			goto skip_dset;
 		}
 	}
 
 	*skip_dentries = (file_de->file_num_ext + 1);
 	*new_node = node;
 	return 0;
-err:
-	*skip_dentries = 1;
+skip_dset:
+	if (need_delete) {
+		exfat_de_iter_get_dirty(iter, 0, &dentry);
+		dentry->type &= EXFAT_DELETE;
+	}
+	for (i = 1; i < *skip_dentries; i++) {
+		exfat_de_iter_get(iter, i, &dentry);
+		if (dentry->type == EXFAT_FILE)
+			break;
+		if (need_delete) {
+			exfat_de_iter_get_dirty(iter, i, &dentry);
+			dentry->type &= EXFAT_DELETE;
+		}
+	}
+	*skip_dentries = i;
 	*new_node = NULL;
 	exfat_free_inode(node);
-	return ret;
+	return need_delete ? 1 : -EINVAL;
 }
 
 static int read_file(struct exfat_de_iter *de_iter,
@@ -948,12 +1017,17 @@ static int read_children(struct exfat_fsck *fsck, struct exfat_inode *dir)
 				exfat_stat.fixed_count++;
 			}
 
-			if ((node->attr & ATTR_SUBDIR) && node->size) {
-				node->parent = dir;
-				list_add_tail(&node->sibling, &dir->children);
-				list_add_tail(&node->list, &exfat->dir_list);
-			} else
-				exfat_free_inode(node);
+			if (node) {
+				if ((node->attr & ATTR_SUBDIR) && node->size) {
+					node->parent = dir;
+					list_add_tail(&node->sibling,
+						      &dir->children);
+					list_add_tail(&node->list,
+						      &exfat->dir_list);
+				} else {
+					exfat_free_inode(node);
+				}
+			}
 			break;
 		case EXFAT_LAST:
 			goto out;

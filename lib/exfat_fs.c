@@ -37,9 +37,11 @@ struct exfat_inode *exfat_alloc_inode(__u16 attr)
 
 void exfat_free_inode(struct exfat_inode *node)
 {
-	if (node->dentry_set)
-		free(node->dentry_set);
-	free(node);
+	if (node) {
+		if (node->dentry_set)
+			free(node->dentry_set);
+		free(node);
+	}
 }
 
 void exfat_free_children(struct exfat_inode *dir, bool file_only)
