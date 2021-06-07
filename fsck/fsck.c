@@ -240,36 +240,60 @@ truncate_file:
 	return 1;
 }
 
-static bool root_get_clus_count(struct exfat *exfat, struct exfat_inode *node,
-							clus_t *clus_count)
+static int root_check_clus_chain(struct exfat *exfat,
+				 struct exfat_inode *node,
+				 clus_t *clus_count)
 {
-	clus_t clus;
+	clus_t clus, next, prev = EXFAT_EOF_CLUSTER;
+
+	if (!exfat_heap_clus(exfat, node->first_clus))
+		goto out_trunc;
 
 	clus = node->first_clus;
 	*clus_count = 0;
 
 	do {
-		if (!exfat_heap_clus(exfat, clus)) {
-			exfat_err("/: bad cluster. 0x%x\n", clus);
-			return false;
-		}
-
 		if (exfat_bitmap_get(exfat->alloc_bitmap, clus)) {
-			exfat_err("/: cluster is already allocated, or "
-				"there is a loop in cluster chain\n");
-			return false;
+			if (exfat_repair_ask(&exfat_fsck,
+					     ER_FILE_DUPLICATED_CLUS,
+					     "ERROR: the cluster chain of root is cyclic"))
+				goto out_trunc;
+			return -EINVAL;
 		}
 
 		exfat_bitmap_set(exfat->alloc_bitmap, clus);
 
-		if (exfat_get_inode_next_clus(exfat, node, clus, &clus) != 0) {
-			exfat_err("/: broken cluster chain\n");
-			return false;
+		if (exfat_get_inode_next_clus(exfat, node, clus, &next)) {
+			exfat_err("ERROR: failed to read the fat entry of root");
+			goto out_trunc;
 		}
 
+		if (next != EXFAT_EOF_CLUSTER && !exfat_heap_clus(exfat, next)) {
+			if (exfat_repair_ask(&exfat_fsck,
+					     ER_FILE_INVALID_CLUS,
+					     "ERROR: the cluster chain of root is broken")) {
+				if (next != EXFAT_BAD_CLUSTER) {
+					prev = clus;
+					(*clus_count)++;
+				}
+				goto out_trunc;
+			}
+			return -EINVAL;
+		}
+
+		prev = clus;
+		clus = next;
 		(*clus_count)++;
 	} while (clus != EXFAT_EOF_CLUSTER);
-	return true;
+
+	return 0;
+out_trunc:
+	if (!exfat_heap_clus(exfat, prev)) {
+		exfat_err("ERROR: the start cluster of root is wrong\n");
+		return -EINVAL;
+	}
+	node->size = *clus_count * exfat->clus_size;
+	return exfat_set_fat(exfat, prev, EXFAT_EOF_CLUSTER);
 }
 
 static int boot_region_checksum(int dev_fd,
@@ -1157,22 +1181,23 @@ out:
 static int exfat_root_dir_check(struct exfat *exfat)
 {
 	struct exfat_inode *root;
-	clus_t clus_count;
+	clus_t clus_count = 0;
 	int err;
 
 	root = exfat_alloc_inode(ATTR_SUBDIR);
 	if (!root)
 		return -ENOMEM;
 
+	exfat->root = root;
 	root->first_clus = le32_to_cpu(exfat->bs->bsx.root_cluster);
-	if (!root_get_clus_count(exfat, root, &clus_count)) {
+	if (root_check_clus_chain(exfat, root, &clus_count)) {
 		exfat_err("failed to follow the cluster chain of root\n");
 		exfat_free_inode(root);
+		exfat->root = NULL;
 		return -EINVAL;
 	}
 	root->size = clus_count * exfat->clus_size;
 
-	exfat->root = root;
 	exfat_stat.dir_count++;
 	exfat_debug("root directory: start cluster[0x%x] size[0x%" PRIx64 "]\n",
 		root->first_clus, root->size);
