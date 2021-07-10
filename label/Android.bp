@@ -1,12 +1,10 @@
 // Copyright 2020 The Android Open Source Project
 
 cc_binary {
-    name: "fsck.exfat",
+    name: "exfatlabel",
 
     srcs: [
-        "de_iter.c",
-        "fsck.c",
-        "repair.c",
+        "label.c",
     ],
     defaults: ["exfatprogs-defaults"],
     static_libs: ["libexfat"],

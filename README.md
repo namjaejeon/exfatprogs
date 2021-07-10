@@ -42,6 +42,10 @@ Usage example:
         mkfs.exfat -f /dev/sda1
     4. For set volume label, use -l option with string user want.
         mkfs.exfat -L "my usb" /dev/sda1
+    5. To change boundary alignment(KB or MB or Byte) user want
+        mkfs.exfat -b 16777216 /dev/sda1
+        mkfs.exfat -b 16384K /dev/sda1
+        mkfs.exfat -b 16M /dev/sda1
 
 - fsck.exfat:
     Check the consistency of your exfat filesystem and optionally repair a corrupted device formatted by exfat.
@@ -59,7 +63,48 @@ Usage example:
         tune.exfat -l /dev/sda1
     2. set new volume label.
         tune.exfat -L "new label" /dev/sda1
+    3. print current volume serial.
+        tune.exfat -i /dev/sda1
+    4. set new volume serial.
+        tune.exfat -I 0x12345678 /dev/sda1
+
+- exfatlabel:
+    Get or Set volume label or serial
+
+Usage example:
+    1. get current volume label.
+        exfatlabel /dev/sda1
+    2. set new volume label.
+        exfatlabel /dev/sda1 "new label"
+    3. get current volume serial.
+        exfatlabel -i /dev/sda1
+    4. set new volume serial.
+        exfatlabel -i /dev/sda1 0x12345678
+
+- dump.exfat:
+    Show on-disk information
+
+Usage example:
+    dump.exfat /dev/sda1
+
 ```
+
+## Benchmarks
+
+Some fsck implementations were tested and compared for Samsung 64GB Pro
+microSDXC UHS-I Class 10 which was filled up to 35GB with 9948 directories
+and 16506 files by fsstress.
+
+The difference in the execution time for each testing is very small.
+
+
+| Implementation       | version         | execution time (seconds) |
+|----------------------|-----------------|--------------------------|
+| **exfatprogs fsck**  | 1.0.4           | 11.561                   |
+| Windows fsck         | Windows 10 1809 | 11.449                   |
+| [exfat-fuse fsck]    | 1.3.0           | 68.977                   |
+
+[exfat-fuse fsck]: https://github.com/relan/exfat
 
 ## Sending feedback
 If you have any issues, please create [issues][1] or contact to [Namjae Jeon](mailto:linkinjeon@kernel.org) and
@@ -68,3 +113,7 @@ If you have any issues, please create [issues][1] or contact to [Namjae Jeon](ma
 
 [1]: https://github.com/exfatprogs/exfatprogs/issues
 [2]: https://github.com/exfatprogs/exfatprogs/pulls
+
+## Contributor information
+* Please base your pull requests on the `exfat-next` branch.
+* Make sure you add 'Signed-Off' information to your commits (e. g. `git commit --signoff`).
