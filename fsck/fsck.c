@@ -261,7 +261,7 @@ static void exfat_free_dir_list(struct exfat *exfat)
 
 /*
  * get references of ancestors that include @child until the count of
- * ancesters is not larger than @count and the count of characters of
+ * ancestors is not larger than @count and the count of characters of
  * their names is not larger than @max_char_len.
  * return true if root is reached.
  */

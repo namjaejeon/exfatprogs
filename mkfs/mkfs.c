@@ -46,14 +46,14 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	struct bsx64 *pbsx = &ppbr->bsx;
 	unsigned int i;
 
-	/* Fill exfat BIOS paramemter block */
+	/* Fill exfat BIOS parameter block */
 	pbpb->jmp_boot[0] = 0xeb;
 	pbpb->jmp_boot[1] = 0x76;
 	pbpb->jmp_boot[2] = 0x90;
 	memcpy(pbpb->oem_name, "EXFAT   ", 8);
 	memset(pbpb->res_zero, 0, 53);
 
-	/* Fill exfat extend BIOS paramemter block */
+	/* Fill exfat extend BIOS parameter block */
 	pbsx->vol_offset = cpu_to_le64(bd->offset / bd->sector_size);
 	pbsx->vol_length = cpu_to_le64(bd->size / bd->sector_size);
 	pbsx->fat_offset = cpu_to_le32(finfo.fat_byte_off / bd->sector_size);

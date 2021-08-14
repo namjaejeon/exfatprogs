@@ -116,4 +116,4 @@ If you have any issues, please create [issues][1] or contact to [Namjae Jeon](ma
 
 ## Contributor information
 * Please base your pull requests on the `exfat-next` branch.
-* Make sure you add 'Signed-Off' information to your commits (e. g. `git commit --signoff`).
+* Make sure you add 'Signed-Off' information to your commits (e.g. `git commit --signoff`).
