@@ -20,8 +20,7 @@ else
 	TEST_COUNT=$#
 fi
 
-for TESTCASE_DIR in $TESTCASE_DIRS
-do
+for TESTCASE_DIR in $TESTCASE_DIRS; do
 	if [ ! -e "${TESTCASE_DIR}/${IMAGE_FILE}.tar.xz" ]; then
 		TEST_COUNT=$((TEST_COUNT - 1))
 		continue
@@ -35,8 +34,8 @@ do
 	DEV_FILE=$(losetup -f "${IMAGE_FILE}" --show)
 
 	# Run fsck for repair
-	$FSCK_PROG $FSCK_OPTS $DEV_FILE
-	if [ "$?" -ne 1 ]; then
+	$FSCK_PROG $FSCK_OPTS "$DEV_FILE"
+	if [ $? -ne 1 ]; then
 		echo ""
 		echo "Failed to repair ${TESTCASE_DIR}"
 		losetup -d "${DEV_FILE}"
@@ -45,8 +44,8 @@ do
 
 	echo ""
 	# Run fsck again
-	$FSCK_PROG -n $DEV_FILE
-	if [ "$?" -ne 0 ]; then
+	$FSCK_PROG -n "$DEV_FILE"
+	if [ $? -ne 0 ]; then
 		echo ""
 		echo "Failed, corrupted ${TESTCASE_DIR}"
 		losetup -d "${DEV_FILE}"
@@ -57,7 +56,7 @@ do
 		EXPECTED_FILE=${IMAGE_FILE}.expected
 		unxz -cfk "${TESTCASE_DIR}/${EXPECTED_FILE}.xz" > "${EXPECTED_FILE}"
 		diff <(xxd "${IMAGE_FILE}") <(xxd "${EXPECTED_FILE}")
-		if [ "$?" -ne 0 ]; then
+		if [ $? -ne 0 ]; then
 			echo ""
 			echo "Failed ${TESTCASE_DIR}"
 			losetup -d "${DEV_FILE}"
