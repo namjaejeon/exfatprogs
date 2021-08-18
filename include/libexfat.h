@@ -34,7 +34,7 @@
 
 #define VOLUME_LABEL_BUFFER_SIZE	(VOLUME_LABEL_MAX_LEN*MB_LEN_MAX+1)
 
-/* Upcase tabel macro */
+/* Upcase table macro */
 #define EXFAT_UPCASE_TABLE_SIZE		(5836)
 
 /* Flags for tune.exfat and exfatlabel */
