@@ -475,8 +475,7 @@ int exfat_read_sector(struct exfat_blk_dev *bd, void *buf, unsigned int sec_off)
 	int ret;
 	unsigned long long offset = sec_off * bd->sector_size;
 
-	lseek(bd->dev_fd, offset, SEEK_SET);
-	ret = read(bd->dev_fd, buf, bd->sector_size);
+	ret = pread(bd->dev_fd, buf, bd->sector_size, offset);
 	if (ret < 0) {
 		exfat_err("read failed, sec_off : %u\n", sec_off);
 		return -1;
@@ -490,8 +489,7 @@ int exfat_write_sector(struct exfat_blk_dev *bd, void *buf,
 	int bytes;
 	unsigned long long offset = sec_off * bd->sector_size;
 
-	lseek(bd->dev_fd, offset, SEEK_SET);
-	bytes = write(bd->dev_fd, buf, bd->sector_size);
+	bytes = pwrite(bd->dev_fd, buf, bd->sector_size, offset);
 	if (bytes != (int)bd->sector_size) {
 		exfat_err("write failed, sec_off : %u, bytes : %d\n", sec_off,
 			bytes);
