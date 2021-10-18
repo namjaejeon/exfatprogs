@@ -440,6 +440,11 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	unsigned long long total_clu_cnt;
 	int clu_len;
 
+	if (ui->cluster_size < bd->sector_size) {
+		exfat_err("cluster size (%u bytes) is smaller than sector size (%u bytes)\n",
+			  ui->cluster_size, bd->sector_size);
+		return -1;
+	}
 	if (ui->boundary_align < bd->sector_size) {
 		exfat_err("boundary alignment is too small (min %d)\n",
 				bd->sector_size);
