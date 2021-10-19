@@ -235,9 +235,9 @@ static int write_fat_entry(int fd, __le32 clu,
 		unsigned long long offset)
 {
 	int nbyte;
+	off_t fat_entry_offset = finfo.fat_byte_off + (offset * sizeof(__le32));
 
-	lseek(fd, finfo.fat_byte_off + (offset * sizeof(__le32)), SEEK_SET);
-	nbyte = write(fd, (__u8 *) &clu, sizeof(__le32));
+	nbyte = pwrite(fd, (__u8 *) &clu, sizeof(__le32), fat_entry_offset);
 	if (nbyte != sizeof(int)) {
 		exfat_err("write failed, offset : %llu, clu : %x\n",
 			offset, clu);
@@ -321,8 +321,7 @@ static int exfat_create_bitmap(struct exfat_blk_dev *bd)
 	for (i = 0; i < finfo.used_clu_cnt - EXFAT_FIRST_CLUSTER; i++)
 		exfat_set_bit(bd, bitmap, i);
 
-	lseek(bd->dev_fd, finfo.bitmap_byte_off, SEEK_SET);
-	nbytes = write(bd->dev_fd, bitmap, finfo.bitmap_byte_len);
+	nbytes = pwrite(bd->dev_fd, bitmap, finfo.bitmap_byte_len, finfo.bitmap_byte_off);
 	if (nbytes != finfo.bitmap_byte_len) {
 		exfat_err("write failed, nbytes : %d, bitmap_len : %d\n",
 			nbytes, finfo.bitmap_byte_len);
@@ -359,8 +358,7 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 	ed[2].upcase_start_clu = cpu_to_le32(finfo.ut_start_clu);
 	ed[2].upcase_size = cpu_to_le64(EXFAT_UPCASE_TABLE_SIZE);
 
-	lseek(bd->dev_fd, finfo.root_byte_off, SEEK_SET);
-	nbytes = write(bd->dev_fd, ed, dentries_len);
+	nbytes = pwrite(bd->dev_fd, ed, dentries_len, finfo.root_byte_off);
 	if (nbytes != dentries_len) {
 		exfat_err("write failed, nbytes : %d, dentries_len : %d\n",
 			nbytes, dentries_len);
