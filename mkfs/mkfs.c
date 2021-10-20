@@ -438,6 +438,11 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	unsigned long long total_clu_cnt;
 	int clu_len;
 
+	if (ui->cluster_size < bd->sector_size) {
+		exfat_err("cluster size (%u bytes) is smaller than sector size (%u bytes)\n",
+			  ui->cluster_size, bd->sector_size);
+		return -1;
+	}
 	if (ui->boundary_align < bd->sector_size) {
 		exfat_err("boundary alignment is too small (min %d)\n",
 				bd->sector_size);
@@ -445,8 +450,12 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	}
 	finfo.fat_byte_off = round_up(bd->offset + 24 * bd->sector_size,
 			ui->boundary_align) - bd->offset;
-	finfo.fat_byte_len = round_up((bd->num_clusters * sizeof(int)),
-		ui->cluster_size);
+	/* Prevent integer overflow when computing the FAT length */
+	if (bd->num_clusters > UINT32_MAX / 4) {
+		exfat_err("cluster size (%u bytes) is too small\n", ui->cluster_size);
+		return -1;
+	}
+	finfo.fat_byte_len = round_up((bd->num_clusters * 4), ui->cluster_size);
 	finfo.clu_byte_off = round_up(bd->offset + finfo.fat_byte_off +
 		finfo.fat_byte_len, ui->boundary_align) - bd->offset;
 	if (bd->size <= finfo.clu_byte_off) {
