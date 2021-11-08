@@ -1478,6 +1478,12 @@ static char *bytes_to_human_readable(size_t bytes)
 	}
 
 	quoti = (unsigned int)(bytes / (1ULL << shift));
+
+	if(i > =  sizeof(units)/sizeof(units[0])) {
+		i = i - 1;
+		shift = shift - 10;
+	}
+
 	remain = 0;
 	if (shift > 0) {
 		remain = (unsigned int)
