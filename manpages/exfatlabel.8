@@ -5,9 +5,8 @@ exfatlabel \- Get or Set volume label or volume serial of an exFAT filesystem
 .B exfatlabel
 [
 .B \-i
-.I volume-label
 ] [
-.B \-v
+.B \-V
 ]
 .I device
 [
@@ -21,15 +20,14 @@ Print or set volume label of an existing exFAT filesystem.
 
 If there is a
 .I label_string
-in argument of exfatlabel, It will be written to volume label
-field on given device. If not, exfatlabel will just print out
-after reading volume label field from given device. If -i or
---volume-serial is given, It can be switched to volume serial
-mode.
+in the argument of exfatlabel, it will be written to the volume
+label field on a given device. If not, exfatlabel will just print
+it after reading the volume label field from the given device. If -i
+or --volume-serial is given, it will switch to volume serial mode.
 .PP
 .SH OPTIONS
 .TP
-.BI \-i
+.BI \-i\ \-\-volume-serial
 Switch to volume serial mode.
 .TP
 .B \-V
