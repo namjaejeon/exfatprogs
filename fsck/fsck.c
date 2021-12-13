@@ -77,6 +77,7 @@ static struct option opts[] = {
 	{"verbose",	no_argument,	NULL,	'v' },
 	{"help",	no_argument,	NULL,	'h' },
 	{"?",		no_argument,	NULL,	'?' },
+	{"ignore-bad-fs",	no_argument,	NULL,	'b' },
 	{NULL,		0,		NULL,	 0  }
 };
 
@@ -88,6 +89,7 @@ static void usage(char *name)
 	fprintf(stderr, "\t-n | --repair-no     No repair\n");
 	fprintf(stderr, "\t-p | --repair-auto   Repair automatically\n");
 	fprintf(stderr, "\t-a                   Repair automatically\n");
+	fprintf(stderr, "\t-b | --ignore-bad-fs Try to recover even if exfat is not found\n");
 	fprintf(stderr, "\t-V | --version       Show version\n");
 	fprintf(stderr, "\t-v | --verbose       Print debug\n");
 	fprintf(stderr, "\t-h | --help          Show help\n");
@@ -796,7 +798,15 @@ static int exfat_boot_region_check(struct exfat *exfat, struct pbr **bs)
 	if (exfat_read(exfat->blk_dev->dev_fd, boot_sect,
 		       sizeof(*boot_sect), 0) != (ssize_t)sizeof(*boot_sect)) {
 		exfat_err("failed to read Main boot sector\n");
+		free(boot_sect);
 		return -EIO;
+	}
+
+	if (memcmp(boot_sect->bpb.oem_name, "EXFAT   ", 8) != 0 &&
+	    !(exfat->options & FSCK_OPTS_IGNORE_BAD_FS_NAME)) {
+		exfat_err("Bad fs_name in boot sector, which does not describe a valid exfat filesystem\n");
+		free(boot_sect);
+		return -ENOTSUP;
 	}
 
 	sect_size = 1 << boot_sect->bsx.sect_size_bits;
@@ -1530,7 +1540,7 @@ int main(int argc, char * const argv[])
 		exfat_err("failed to init locale/codeset\n");
 
 	opterr = 0;
-	while ((c = getopt_long(argc, argv, "arynpVvh", opts, NULL)) != EOF) {
+	while ((c = getopt_long(argc, argv, "arynpbVvh", opts, NULL)) != EOF) {
 		switch (c) {
 		case 'n':
 			if (ui.options & FSCK_OPTS_REPAIR_ALL)
@@ -1552,6 +1562,9 @@ int main(int argc, char * const argv[])
 			if (ui.options & FSCK_OPTS_REPAIR_ALL)
 				usage(argv[0]);
 			ui.options |= FSCK_OPTS_REPAIR_AUTO;
+			break;
+		case 'b':
+			ui.options |= FSCK_OPTS_IGNORE_BAD_FS_NAME;
 			break;
 		case 'V':
 			version_only = true;
@@ -1576,6 +1589,8 @@ int main(int argc, char * const argv[])
 	if (ui.options & FSCK_OPTS_REPAIR_WRITE)
 		ui.ei.writeable = true;
 	else {
+		if (ui.options & FSCK_OPTS_IGNORE_BAD_FS_NAME)
+			usage(argv[0]);
 		ui.options |= FSCK_OPTS_REPAIR_NO;
 		ui.ei.writeable = false;
 	}

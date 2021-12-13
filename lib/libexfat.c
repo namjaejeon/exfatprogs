@@ -374,6 +374,12 @@ off_t exfat_get_root_entry_offset(struct exfat_blk_dev *bd)
 		return -1;
 	}
 
+	if (memcmp(bs->bpb.oem_name, "EXFAT   ", 8) != 0) {
+		exfat_err("Bad fs_name in boot sector, which does not describe a valid exfat filesystem\n");
+		free(bs);
+		return -1;
+	}
+
 	sector_size = 1 << bs->bsx.sect_size_bits;
 	cluster_size = (1 << bs->bsx.sect_per_clus_bits) * sector_size;
 	root_clu_off = le32_to_cpu(bs->bsx.clu_offset) * sector_size +
@@ -546,6 +552,12 @@ int exfat_show_volume_serial(int fd)
 		goto free_ppbr;
 	}
 
+	if (memcmp(ppbr->bpb.oem_name, "EXFAT   ", 8) != 0) {
+		exfat_err("Bad fs_name in boot sector, which does not describe a valid exfat filesystem\n");
+		ret = -1;
+		goto free_ppbr;
+	}
+
 	exfat_info("volume serial : 0x%x\n", ppbr->bsx.vol_serial);
 
 free_ppbr:
@@ -610,6 +622,12 @@ int exfat_set_volume_serial(struct exfat_blk_dev *bd,
 			BOOT_SEC_IDX);
 	if (ret < 0) {
 		exfat_err("main boot sector read failed\n");
+		ret = -1;
+		goto free_ppbr;
+	}
+
+	if (memcmp(ppbr->bpb.oem_name, "EXFAT   ", 8) != 0) {
+		exfat_err("Bad fs_name in boot sector, which does not describe a valid exfat filesystem\n");
 		ret = -1;
 		goto free_ppbr;
 	}

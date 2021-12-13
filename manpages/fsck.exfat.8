@@ -14,6 +14,8 @@ fsck.exfat \- check an exFAT filesystem
 ] [
 .B \-y
 ] [
+.B \-b
+] [
 .B \-v
 ]
 .I device
@@ -46,6 +48,9 @@ Prints the version number and exits.
 .TP
 .B \-y
 Repair the filesystem answering yes to all questions.
+.TP
+.B \-b
+Try to repair the filesystem even if the exFAT filesystem is not found.
 .SH SEE ALSO
 .BR fsck (8),
 .BR fstab (5),
