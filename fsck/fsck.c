@@ -467,13 +467,10 @@ static int check_clus_chain(struct exfat *exfat, struct exfat_inode *node)
 
 		if (!EXFAT_BITMAP_GET(exfat->disk_bitmap,
 				clus - EXFAT_FIRST_CLUSTER)) {
-			if (repair_file_ask(&exfat->de_iter, node,
-					ER_FILE_INVALID_CLUS,
-					"cluster is marked as free. truncate to %" PRIu64 " bytes",
-					count * exfat->clus_size))
-				goto truncate_file;
-
-			else
+			if (!repair_file_ask(&exfat->de_iter, node,
+					     ER_FILE_INVALID_CLUS,
+					     "cluster %#x is marked as free",
+					     clus))
 				return -EINVAL;
 		}
 
@@ -544,8 +541,10 @@ truncate_file:
 	/* remaining clusters will be freed while FAT is compared with
 	 * alloc_bitmap.
 	 */
-	if (!node->is_contiguous && heap_clus(exfat, prev))
-		return set_fat(exfat, prev, EXFAT_EOF_CLUSTER);
+	if (!node->is_contiguous && heap_clus(exfat, prev)) {
+		if (set_fat(exfat, prev, EXFAT_EOF_CLUSTER))
+			return -EIO;
+	}
 	return 1;
 }
 
