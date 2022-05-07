@@ -1479,19 +1479,12 @@ static char *bytes_to_human_readable(size_t bytes)
 	static const char * const units[] = {"B", "KB", "MB", "GB", "TB", "PB"};
 	static char buf[15*4];
 	unsigned int i, shift, quoti, remain;
+	i = sizeof(units) / sizeof(units[0]) - 1;
 
-	shift = 0;
-	for (i = 0; i < sizeof(units)/sizeof(units[0]); i++) {
-		if (bytes / (1ULL << (shift + 10)) == 0)
-			break;
-		shift += 10;
-	}
+	while (i && (bytes >> i * 10) == 0)
+		i--;
 
-	if (i >= sizeof(units)/sizeof(units[0])) {
-		i = i - 1;
-		shift = shift - 10;
-	}
-
+	shift = i * 10;
 	quoti = (unsigned int)(bytes / (1ULL << shift));
 	remain = 0;
 	if (shift > 0) {
