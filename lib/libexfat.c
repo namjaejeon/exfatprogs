@@ -470,7 +470,12 @@ int exfat_set_volume_label(struct exfat_blk_dev *bd,
 		exfat_err("volume entry write failed: %d\n", errno);
 		return -1;
 	}
-	fsync(bd->dev_fd);
+
+	if (fsync(bd->dev_fd) == -1) {
+		exfat_err("failed to sync volume entry: %d, %s\n", errno,
+			  strerror(errno));
+		return -1;
+	}
 
 	exfat_info("new label: %s\n", label_input);
 	return 0;
@@ -479,7 +484,8 @@ int exfat_set_volume_label(struct exfat_blk_dev *bd,
 int exfat_read_sector(struct exfat_blk_dev *bd, void *buf, unsigned int sec_off)
 {
 	int ret;
-	unsigned long long offset = sec_off * bd->sector_size;
+	unsigned long long offset =
+		(unsigned long long)sec_off * bd->sector_size;
 
 	ret = pread(bd->dev_fd, buf, bd->sector_size, offset);
 	if (ret < 0) {
@@ -493,7 +499,8 @@ int exfat_write_sector(struct exfat_blk_dev *bd, void *buf,
 		unsigned int sec_off)
 {
 	int bytes;
-	unsigned long long offset = sec_off * bd->sector_size;
+	unsigned long long offset =
+		(unsigned long long)sec_off * bd->sector_size;
 
 	bytes = pwrite(bd->dev_fd, buf, bd->sector_size, offset);
 	if (bytes != (int)bd->sector_size) {

@@ -82,6 +82,9 @@ static int read_ahead_next_blocks(struct exfat_de_iter *iter,
 				offset >= iter->ra_begin_offset) {
 			ret = get_next_clus(exfat, iter->parent,
 					p_clus, &ra_p_clus);
+			if (ret)
+				return ret;
+
 			if (ra_p_clus == EXFAT_EOF_CLUSTER)
 				return -EIO;
 
@@ -172,10 +175,10 @@ static ssize_t read_block(struct exfat_de_iter *iter, unsigned int block)
 			ret = get_next_clus(exfat, iter->parent,
 					prev_desc->p_clus, &desc->p_clus);
 			desc->offset = 0;
-			if (!ret && desc->p_clus == EXFAT_EOF_CLUSTER)
-				return EOF;
-			else if (ret)
+			if (ret)
 				return ret;
+			else if (desc->p_clus == EXFAT_EOF_CLUSTER)
+				return EOF;
 		}
 	}
 
