@@ -18,7 +18,7 @@
 
 typedef unsigned int er_problem_code_t;
 
-bool exfat_repair_ask(struct exfat *exfat, er_problem_code_t prcode,
-		const char *fmt, ...);
+bool exfat_repair_ask(struct exfat_fsck *fsck, er_problem_code_t prcode,
+		      const char *fmt, ...);
 
 #endif

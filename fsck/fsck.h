@@ -58,9 +58,6 @@ enum fsck_ui_options {
 };
 
 struct exfat {
-	enum fsck_ui_options	options;
-	bool			dirty:1;
-	bool			dirty_fat:1;
 	struct exfat_blk_dev	*blk_dev;
 	struct pbr		*bs;
 	char			volume_label[VOLUME_LABEL_BUFFER_SIZE];
@@ -69,12 +66,19 @@ struct exfat {
 	clus_t			clus_count;
 	unsigned int		clus_size;
 	unsigned int		sect_size;
-	struct exfat_de_iter	de_iter;
-	struct buffer_desc	buffer_desc[2];	/* cluster * 2 */
 	char			*alloc_bitmap;
 	char			*disk_bitmap;
 	clus_t			disk_bitmap_clus;
 	unsigned int		disk_bitmap_size;
+};
+
+struct exfat_fsck {
+	struct exfat		*exfat;
+	struct exfat_de_iter	de_iter;
+	struct buffer_desc	*buffer_desc;	/* cluster * 2 */
+	enum fsck_ui_options	options;
+	bool			dirty:1;
+	bool			dirty_fat:1;
 };
 
 #define EXFAT_CLUSTER_SIZE(pbr) (1 << ((pbr)->bsx.sect_size_bits +	\
@@ -88,7 +92,7 @@ int get_next_clus(struct exfat *exfat, struct exfat_inode *node,
 
 /* de_iter.c */
 int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
-				struct exfat_inode *dir);
+			struct exfat_inode *dir, struct buffer_desc *bd);
 int exfat_de_iter_get(struct exfat_de_iter *iter,
 			int ith, struct exfat_dentry **dentry);
 int exfat_de_iter_get_dirty(struct exfat_de_iter *iter,

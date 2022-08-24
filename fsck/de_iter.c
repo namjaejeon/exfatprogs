@@ -203,7 +203,7 @@ static ssize_t read_block(struct exfat_de_iter *iter, unsigned int block)
 }
 
 int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
-				struct exfat_inode *dir)
+		       struct exfat_inode *dir, struct buffer_desc *bd)
 {
 	iter->exfat = exfat;
 	iter->parent = dir;
@@ -216,7 +216,7 @@ int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 	iter->ra_partial_size = MIN(iter->ra_partial_size, 8 * KB);
 
 	if (!iter->buffer_desc)
-		iter->buffer_desc = exfat->buffer_desc;
+		iter->buffer_desc = bd;
 
 	if (iter->parent->size == 0)
 		return EOF;

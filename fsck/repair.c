@@ -57,19 +57,19 @@ static struct exfat_repair_problem *find_problem(er_problem_code_t prcode)
 	return NULL;
 }
 
-static bool ask_repair(struct exfat *exfat, struct exfat_repair_problem *pr)
+static bool ask_repair(struct exfat_fsck *fsck, struct exfat_repair_problem *pr)
 {
 	bool repair = false;
 	char answer[8];
 
-	if (exfat->options & FSCK_OPTS_REPAIR_NO ||
-			pr->flags & ERF_DEFAULT_NO)
+	if (fsck->options & FSCK_OPTS_REPAIR_NO ||
+	    pr->flags & ERF_DEFAULT_NO)
 		repair = false;
-	else if (exfat->options & FSCK_OPTS_REPAIR_YES ||
-			pr->flags & ERF_DEFAULT_YES)
+	else if (fsck->options & FSCK_OPTS_REPAIR_YES ||
+		 pr->flags & ERF_DEFAULT_YES)
 		repair = true;
 	else {
-		if (exfat->options & FSCK_OPTS_REPAIR_ASK) {
+		if (fsck->options & FSCK_OPTS_REPAIR_ASK) {
 			do {
 				printf(". %s (y/N)? ",
 					prompts[pr->prompt_type]);
@@ -83,8 +83,8 @@ static bool ask_repair(struct exfat *exfat, struct exfat_repair_problem *pr)
 						return false;
 				}
 			} while (1);
-		} else if (exfat->options & FSCK_OPTS_REPAIR_AUTO &&
-				pr->flags & ERF_PREEN_YES)
+		} else if (fsck->options & FSCK_OPTS_REPAIR_AUTO &&
+			   pr->flags & ERF_PREEN_YES)
 			repair = true;
 	}
 
@@ -93,8 +93,8 @@ static bool ask_repair(struct exfat *exfat, struct exfat_repair_problem *pr)
 	return repair;
 }
 
-bool exfat_repair_ask(struct exfat *exfat, er_problem_code_t prcode,
-			const char *desc, ...)
+bool exfat_repair_ask(struct exfat_fsck *fsck, er_problem_code_t prcode,
+		      const char *desc, ...)
 {
 	struct exfat_repair_problem *pr = NULL;
 	va_list ap;
@@ -109,11 +109,12 @@ bool exfat_repair_ask(struct exfat *exfat, er_problem_code_t prcode,
 	vprintf(desc, ap);
 	va_end(ap);
 
-	if (ask_repair(exfat, pr)) {
+	if (ask_repair(fsck, pr)) {
 		if (pr->prompt_type & ERP_TRUNCATE)
-			exfat->dirty_fat = true;
-		exfat->dirty = true;
+			fsck->dirty_fat = true;
+		fsck->dirty = true;
 		return true;
-	} else
+	} else {
 		return false;
+	}
 }
