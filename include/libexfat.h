@@ -88,12 +88,28 @@ struct exfat_user_input {
 struct exfat;
 struct exfat_inode;
 
+#ifdef WORDS_BIGENDIAN
+typedef __u8	bitmap_t;
+#else
+typedef __u32	bitmap_t;
+#endif
+
+#define BITS_PER	(sizeof(bitmap_t) * 8)
+#define BIT_MASK(__c)	(1 << ((__c) % BITS_PER))
+#define BIT_ENTRY(__c)	((__c) / BITS_PER)
+
+#define EXFAT_BITMAP_SIZE(__c_count)	\
+	(DIV_ROUND_UP(__c_count, BITS_PER) * sizeof(bitmap_t))
+#define EXFAT_BITMAP_GET(__bmap, __c)	\
+			(((bitmap_t *)(__bmap))[BIT_ENTRY(__c)] & BIT_MASK(__c))
+#define EXFAT_BITMAP_SET(__bmap, __c)	\
+			(((bitmap_t *)(__bmap))[BIT_ENTRY(__c)] |= \
+			 BIT_MASK(__c))
+void exfat_bitmap_set_range(struct exfat *exfat, char *bitmap,
+			    clus_t start_clus, clus_t count);
+
 void show_version(void);
 
-void exfat_set_bit(struct exfat_blk_dev *bd, char *bitmap,
-		unsigned int clu);
-void exfat_clear_bit(struct exfat_blk_dev *bd, char *bitmap,
-		unsigned int clu);
 wchar_t exfat_bad_char(wchar_t w);
 void boot_calc_checksum(unsigned char *sector, unsigned short size,
 		bool is_boot_sec, __le32 *checksum);

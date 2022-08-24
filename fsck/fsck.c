@@ -27,24 +27,6 @@ struct fsck_user_input {
 
 #define EXFAT_MAX_UPCASE_CHARS	0x10000
 
-#ifdef WORDS_BIGENDIAN
-typedef __u8	bitmap_t;
-#else
-typedef __u32	bitmap_t;
-#endif
-
-#define BITS_PER	(sizeof(bitmap_t) * 8)
-#define BIT_MASK(__c)	(1 << ((__c) % BITS_PER))
-#define BIT_ENTRY(__c)	((__c) / BITS_PER)
-
-#define EXFAT_BITMAP_SIZE(__c_count)	\
-	(DIV_ROUND_UP(__c_count, BITS_PER) * sizeof(bitmap_t))
-#define EXFAT_BITMAP_GET(__bmap, __c)	\
-			(((bitmap_t *)(__bmap))[BIT_ENTRY(__c)] & BIT_MASK(__c))
-#define EXFAT_BITMAP_SET(__bmap, __c)	\
-			(((bitmap_t *)(__bmap))[BIT_ENTRY(__c)] |= \
-			 BIT_MASK(__c))
-
 #define FSCK_EXIT_NO_ERRORS		0x00
 #define FSCK_EXIT_CORRECTED		0x01
 #define FSCK_EXIT_NEED_REBOOT		0x02
@@ -774,23 +756,6 @@ static bool read_volume_label(struct exfat_de_iter *iter)
 
 	exfat_info("volume label [%s]\n", exfat->volume_label);
 	return true;
-}
-
-static void exfat_bitmap_set_range(struct exfat *exfat, char *bitmap,
-				   clus_t start_clus, clus_t count)
-{
-	clus_t clus;
-
-	if (!exfat_heap_clus(exfat, start_clus) ||
-	    !exfat_heap_clus(exfat, start_clus + count))
-		return;
-
-	clus = start_clus;
-	while (clus < start_clus + count) {
-		EXFAT_BITMAP_SET(bitmap,
-				 clus - EXFAT_FIRST_CLUSTER);
-		clus++;
-	}
 }
 
 static bool read_bitmap(struct exfat_de_iter *iter)

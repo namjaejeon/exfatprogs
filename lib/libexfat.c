@@ -21,63 +21,23 @@
 #include "version.h"
 #include "exfat_fs.h"
 
-#define BITS_PER_LONG		(sizeof(long) * CHAR_BIT)
-
-#ifdef WORDS_BIGENDIAN
-#define BITOP_LE_SWIZZLE	((BITS_PER_LONG - 1) & ~0x7)
-#else
-#define BITOP_LE_SWIZZLE        0
-#endif
-
-#define BIT_MASK(nr)            (1UL << ((nr) % BITS_PER_LONG))
-#define BIT_WORD(nr)            ((nr) / BITS_PER_LONG)
-
 unsigned int print_level  = EXFAT_INFO;
 
-static inline void set_bit(int nr, void *addr)
+void exfat_bitmap_set_range(struct exfat *exfat, char *bitmap,
+			    clus_t start_clus, clus_t count)
 {
-	unsigned long mask = BIT_MASK(nr);
-	unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
+	clus_t clus;
 
-	*p  |= mask;
-}
+	if (!exfat_heap_clus(exfat, start_clus) ||
+	    !exfat_heap_clus(exfat, start_clus + count))
+		return;
 
-static inline void clear_bit(int nr, void *addr)
-{
-	unsigned long mask = BIT_MASK(nr);
-	unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
-
-	*p &= ~mask;
-}
-
-static inline void set_bit_le(int nr, void *addr)
-{
-	set_bit(nr ^ BITOP_LE_SWIZZLE, addr);
-}
-
-static inline void clear_bit_le(int nr, void *addr)
-{
-	clear_bit(nr ^ BITOP_LE_SWIZZLE, addr);
-}
-
-void exfat_set_bit(struct exfat_blk_dev *bd, char *bitmap,
-		unsigned int clu)
-{
-	int b;
-
-	b = clu & ((bd->sector_size << 3) - 1);
-
-	set_bit_le(b, bitmap);
-}
-
-void exfat_clear_bit(struct exfat_blk_dev *bd, char *bitmap,
-		unsigned int clu)
-{
-	int b;
-
-	b = clu & ((bd->sector_size << 3) - 1);
-
-	clear_bit_le(b, bitmap);
+	clus = start_clus;
+	while (clus < start_clus + count) {
+		EXFAT_BITMAP_SET(bitmap,
+				 clus - EXFAT_FIRST_CLUSTER);
+		clus++;
+	}
 }
 
 wchar_t exfat_bad_char(wchar_t w)

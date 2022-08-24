@@ -14,24 +14,6 @@
 #include "exfat_fs.h"
 #include "exfat_dir.h"
 
-#ifdef WORDS_BIGENDIAN
-typedef __u8	bitmap_t;
-#else
-typedef __u32	bitmap_t;
-#endif
-
-#define BITS_PER	(sizeof(bitmap_t) * 8)
-#define BIT_MASK(__c)	(1 << ((__c) % BITS_PER))
-#define BIT_ENTRY(__c)	((__c) / BITS_PER)
-
-#define EXFAT_BITMAP_SIZE(__c_count)	\
-	(DIV_ROUND_UP(__c_count, BITS_PER) * sizeof(bitmap_t))
-#define EXFAT_BITMAP_GET(__bmap, __c)	\
-			(((bitmap_t *)(__bmap))[BIT_ENTRY(__c)] & BIT_MASK(__c))
-#define EXFAT_BITMAP_SET(__bmap, __c)	\
-			(((bitmap_t *)(__bmap))[BIT_ENTRY(__c)] |= \
-			 BIT_MASK(__c))
-
 struct exfat_inode *exfat_alloc_inode(__u16 attr)
 {
 	struct exfat_inode *node;
