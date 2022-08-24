@@ -19,6 +19,7 @@
 #include "exfat_ondisk.h"
 #include "libexfat.h"
 #include "version.h"
+#include "exfat_fs.h"
 
 #define BITS_PER_LONG		(sizeof(long) * CHAR_BIT)
 
@@ -680,4 +681,65 @@ unsigned int exfat_clus_to_blk_dev_off(struct exfat_blk_dev *bd,
 {
 	return clu_off_sectnr * bd->sector_size +
 		(clu - EXFAT_RESERVED_CLUSTERS) * bd->cluster_size;
+}
+
+int exfat_get_next_clus(struct exfat *exfat, struct exfat_inode *node,
+			clus_t clus, clus_t *next)
+{
+	off_t offset;
+
+	*next = EXFAT_EOF_CLUSTER;
+
+	if (!exfat_heap_clus(exfat, clus))
+		return -EINVAL;
+
+	if (node->is_contiguous) {
+		*next = clus + 1;
+		return 0;
+	}
+
+	offset = (off_t)le32_to_cpu(exfat->bs->bsx.fat_offset) <<
+				exfat->bs->bsx.sect_size_bits;
+	offset += sizeof(clus_t) * clus;
+
+	if (exfat_read(exfat->blk_dev->dev_fd, next, sizeof(*next), offset)
+			!= sizeof(*next))
+		return -EIO;
+	*next = le32_to_cpu(*next);
+	return 0;
+}
+
+int exfat_set_fat(struct exfat *exfat, clus_t clus, clus_t next_clus)
+{
+	off_t offset;
+
+	offset = le32_to_cpu(exfat->bs->bsx.fat_offset) <<
+		exfat->bs->bsx.sect_size_bits;
+	offset += sizeof(clus_t) * clus;
+
+	if (exfat_write(exfat->blk_dev->dev_fd, &next_clus, sizeof(next_clus),
+			offset) != sizeof(next_clus))
+		return -EIO;
+	return 0;
+}
+
+off_t exfat_s2o(struct exfat *exfat, off_t sect)
+{
+	return sect << exfat->bs->bsx.sect_size_bits;
+}
+
+off_t exfat_c2o(struct exfat *exfat, unsigned int clus)
+{
+	if (clus < EXFAT_FIRST_CLUSTER)
+		return ~0L;
+
+	return exfat_s2o(exfat, le32_to_cpu(exfat->bs->bsx.clu_offset) +
+				((off_t)(clus - EXFAT_FIRST_CLUSTER) <<
+				 exfat->bs->bsx.sect_per_clus_bits));
+}
+
+bool exfat_heap_clus(struct exfat *exfat, clus_t clus)
+{
+	return clus >= EXFAT_FIRST_CLUSTER &&
+		(clus - EXFAT_FIRST_CLUSTER) < exfat->clus_count;
 }

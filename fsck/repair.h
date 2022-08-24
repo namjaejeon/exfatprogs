@@ -17,6 +17,7 @@
 #define ER_FILE_ZERO_NOFAT		0x00002007
 
 typedef unsigned int er_problem_code_t;
+struct exfat_fsck;
 
 bool exfat_repair_ask(struct exfat_fsck *fsck, er_problem_code_t prcode,
 		      const char *fmt, ...);

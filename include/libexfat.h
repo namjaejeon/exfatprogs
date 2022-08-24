@@ -10,6 +10,8 @@
 #include <wchar.h>
 #include <limits.h>
 
+typedef __u32 clus_t;
+
 #define KB			(1024)
 #define MB			(1024*1024)
 #define GB			(1024UL*1024UL*1024UL)
@@ -45,6 +47,10 @@
 
 #define EXFAT_MAX_SECTOR_SIZE		4096
 
+#define EXFAT_CLUSTER_SIZE(pbr) (1 << ((pbr)->bsx.sect_size_bits +	\
+					(pbr)->bsx.sect_per_clus_bits))
+#define EXFAT_SECTOR_SIZE(pbr) (1 << (pbr)->bsx.sect_size_bits)
+
 enum {
 	BOOT_SEC_IDX = 0,
 	EXBOOT_SEC_IDX,
@@ -78,6 +84,9 @@ struct exfat_user_input {
 	int volume_label_len;
 	unsigned int volume_serial;
 };
+
+struct exfat;
+struct exfat_inode;
 
 void show_version(void);
 
@@ -114,7 +123,12 @@ int exfat_set_volume_serial(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui);
 unsigned int exfat_clus_to_blk_dev_off(struct exfat_blk_dev *bd,
 		unsigned int clu_off, unsigned int clu);
-
+int exfat_get_next_clus(struct exfat *exfat, struct exfat_inode *node,
+			clus_t clus, clus_t *next);
+int exfat_set_fat(struct exfat *exfat, clus_t clus, clus_t next_clus);
+off_t exfat_s2o(struct exfat *exfat, off_t sect);
+off_t exfat_c2o(struct exfat *exfat, unsigned int clus);
+bool exfat_heap_clus(struct exfat *exfat, clus_t clus);
 
 /*
  * Exfat Print

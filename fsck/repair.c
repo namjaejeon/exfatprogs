@@ -8,8 +8,10 @@
 
 #include "exfat_ondisk.h"
 #include "libexfat.h"
-#include "fsck.h"
 #include "repair.h"
+#include "exfat_fs.h"
+#include "exfat_dir.h"
+#include "fsck.h"
 
 struct exfat_repair_problem {
 	er_problem_code_t	prcode;
