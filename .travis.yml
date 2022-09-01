@@ -7,6 +7,7 @@ notifications:
 
 before_script:
  - sudo apt-get install linux-headers-$(uname -r)
+ - sudo apt-get install xz-utils
  - git clone --branch=exfat-next https://github.com/namjaejeon/exfat_oot
  - ./.travis_get_mainline_kernel
  - export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
@@ -21,11 +22,16 @@ script:
  - ./configure > /dev/null
  - make -j$((`nproc`+1)) > /dev/null
  - sudo make install > /dev/null
+ # build & install exfat
  - cd exfat_oot
  - make > /dev/null
  - sudo make install > /dev/null
  - sudo modprobe exfat
  - sudo mkdir -p /mnt/test
+ - cd ..
+ # run fsck repair testcases
+ - cd tests
+ - sudo ./test_fsck.sh
  # create file/director test
  - truncate -s 10G test.img
  - sudo losetup /dev/loop22 test.img
