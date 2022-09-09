@@ -9,6 +9,7 @@ cc_library_headers {
         "tune",
         "label",
         "dump",
+	"exfat2img",
     ],
 }
 

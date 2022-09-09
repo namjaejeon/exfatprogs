@@ -8,8 +8,10 @@
 
 #include "exfat_ondisk.h"
 #include "libexfat.h"
-#include "fsck.h"
 #include "repair.h"
+#include "exfat_fs.h"
+#include "exfat_dir.h"
+#include "fsck.h"
 
 struct exfat_repair_problem {
 	er_problem_code_t	prcode;
@@ -25,23 +27,32 @@ struct exfat_repair_problem {
 /* Prompt types */
 #define ERP_FIX			0x00000001
 #define ERP_TRUNCATE		0x00000002
+#define ERP_DELETE		0x00000003
 
 static const char *prompts[] = {
 	"Repair",
 	"Fix",
 	"Truncate",
+	"Delete",
 };
 
 static struct exfat_repair_problem problems[] = {
 	{ER_BS_CHECKSUM, ERF_PREEN_YES, ERP_FIX},
 	{ER_BS_BOOT_REGION, 0, ERP_FIX},
-	{ER_DE_CHECKSUM, ERF_PREEN_YES, ERP_FIX},
+	{ER_DE_CHECKSUM, ERF_PREEN_YES, ERP_DELETE},
+	{ER_DE_UNKNOWN, ERF_PREEN_YES, ERP_DELETE},
+	{ER_DE_FILE, ERF_PREEN_YES, ERP_DELETE},
+	{ER_DE_SECONDARY_COUNT, ERF_PREEN_YES, ERP_DELETE},
+	{ER_DE_STREAM, ERF_PREEN_YES, ERP_DELETE},
+	{ER_DE_NAME, ERF_PREEN_YES, ERP_DELETE},
+	{ER_DE_NAME_HASH, ERF_PREEN_YES, ERP_FIX},
+	{ER_DE_NAME_LEN, ERF_PREEN_YES, ERP_FIX},
 	{ER_FILE_VALID_SIZE, ERF_PREEN_YES, ERP_FIX},
-	{ER_FILE_INVALID_CLUS, ERF_DEFAULT_NO, ERP_TRUNCATE},
-	{ER_FILE_FIRST_CLUS, ERF_DEFAULT_NO, ERP_TRUNCATE},
-	{ER_FILE_SMALLER_SIZE, ERF_DEFAULT_NO, ERP_TRUNCATE},
-	{ER_FILE_LARGER_SIZE, ERF_DEFAULT_NO, ERP_TRUNCATE},
-	{ER_FILE_DUPLICATED_CLUS, ERF_DEFAULT_NO, ERP_TRUNCATE},
+	{ER_FILE_INVALID_CLUS, ERF_PREEN_YES, ERP_TRUNCATE},
+	{ER_FILE_FIRST_CLUS, ERF_PREEN_YES, ERP_TRUNCATE},
+	{ER_FILE_SMALLER_SIZE, ERF_PREEN_YES, ERP_TRUNCATE},
+	{ER_FILE_LARGER_SIZE, ERF_PREEN_YES, ERP_TRUNCATE},
+	{ER_FILE_DUPLICATED_CLUS, ERF_PREEN_YES, ERP_TRUNCATE},
 	{ER_FILE_ZERO_NOFAT, ERF_PREEN_YES, ERP_FIX},
 };
 
@@ -57,19 +68,19 @@ static struct exfat_repair_problem *find_problem(er_problem_code_t prcode)
 	return NULL;
 }
 
-static bool ask_repair(struct exfat *exfat, struct exfat_repair_problem *pr)
+static bool ask_repair(struct exfat_fsck *fsck, struct exfat_repair_problem *pr)
 {
 	bool repair = false;
 	char answer[8];
 
-	if (exfat->options & FSCK_OPTS_REPAIR_NO ||
-			pr->flags & ERF_DEFAULT_NO)
+	if (fsck->options & FSCK_OPTS_REPAIR_NO ||
+	    pr->flags & ERF_DEFAULT_NO)
 		repair = false;
-	else if (exfat->options & FSCK_OPTS_REPAIR_YES ||
-			pr->flags & ERF_DEFAULT_YES)
+	else if (fsck->options & FSCK_OPTS_REPAIR_YES ||
+		 pr->flags & ERF_DEFAULT_YES)
 		repair = true;
 	else {
-		if (exfat->options & FSCK_OPTS_REPAIR_ASK) {
+		if (fsck->options & FSCK_OPTS_REPAIR_ASK) {
 			do {
 				printf(". %s (y/N)? ",
 					prompts[pr->prompt_type]);
@@ -83,8 +94,8 @@ static bool ask_repair(struct exfat *exfat, struct exfat_repair_problem *pr)
 						return false;
 				}
 			} while (1);
-		} else if (exfat->options & FSCK_OPTS_REPAIR_AUTO &&
-				pr->flags & ERF_PREEN_YES)
+		} else if (fsck->options & FSCK_OPTS_REPAIR_AUTO &&
+			   pr->flags & ERF_PREEN_YES)
 			repair = true;
 	}
 
@@ -93,8 +104,8 @@ static bool ask_repair(struct exfat *exfat, struct exfat_repair_problem *pr)
 	return repair;
 }
 
-bool exfat_repair_ask(struct exfat *exfat, er_problem_code_t prcode,
-			const char *desc, ...)
+bool exfat_repair_ask(struct exfat_fsck *fsck, er_problem_code_t prcode,
+		      const char *desc, ...)
 {
 	struct exfat_repair_problem *pr = NULL;
 	va_list ap;
@@ -109,11 +120,12 @@ bool exfat_repair_ask(struct exfat *exfat, er_problem_code_t prcode,
 	vprintf(desc, ap);
 	va_end(ap);
 
-	if (ask_repair(exfat, pr)) {
+	if (ask_repair(fsck, pr)) {
 		if (pr->prompt_type & ERP_TRUNCATE)
-			exfat->dirty_fat = true;
-		exfat->dirty = true;
+			fsck->dirty_fat = true;
+		fsck->dirty = true;
 		return true;
-	} else
+	} else {
 		return false;
+	}
 }
