@@ -10,6 +10,8 @@
 #include <wchar.h>
 #include <limits.h>
 
+typedef __u32 clus_t;
+
 #define KB			(1024)
 #define MB			(1024*1024)
 #define GB			(1024UL*1024UL*1024UL)
@@ -34,7 +36,8 @@
 
 #define VOLUME_LABEL_BUFFER_SIZE	(VOLUME_LABEL_MAX_LEN*MB_LEN_MAX+1)
 
-/* Upcase tabel macro */
+/* Upcase table macro */
+#define EXFAT_UPCASE_TABLE_CHARS	(0x10000)
 #define EXFAT_UPCASE_TABLE_SIZE		(5836)
 
 /* Flags for tune.exfat and exfatlabel */
@@ -44,6 +47,10 @@
 #define EXFAT_SET_VOLUME_SERIAL		0x04
 
 #define EXFAT_MAX_SECTOR_SIZE		4096
+
+#define EXFAT_CLUSTER_SIZE(pbr) (1 << ((pbr)->bsx.sect_size_bits +	\
+					(pbr)->bsx.sect_per_clus_bits))
+#define EXFAT_SECTOR_SIZE(pbr) (1 << (pbr)->bsx.sect_size_bits)
 
 enum {
 	BOOT_SEC_IDX = 0,
@@ -79,12 +86,51 @@ struct exfat_user_input {
 	unsigned int volume_serial;
 };
 
+struct exfat;
+struct exfat_inode;
+
+#ifdef WORDS_BIGENDIAN
+typedef __u8	bitmap_t;
+#else
+typedef __u32	bitmap_t;
+#endif
+
+#define BITS_PER	(sizeof(bitmap_t) * 8)
+#define BIT_MASK(__c)	(1 << ((__c) % BITS_PER))
+#define BIT_ENTRY(__c)	((__c) / BITS_PER)
+
+#define EXFAT_BITMAP_SIZE(__c_count)	\
+	(DIV_ROUND_UP(__c_count, BITS_PER) * sizeof(bitmap_t))
+
+static inline bool exfat_bitmap_get(char *bmap, clus_t c)
+{
+	clus_t cc = c - EXFAT_FIRST_CLUSTER;
+
+	return ((bitmap_t *)(bmap))[BIT_ENTRY(cc)] & BIT_MASK(cc);
+}
+
+static inline void exfat_bitmap_set(char *bmap, clus_t c)
+{
+	clus_t cc = c - EXFAT_FIRST_CLUSTER;
+
+	(((bitmap_t *)(bmap))[BIT_ENTRY(cc)] |= BIT_MASK(cc));
+}
+
+static inline void exfat_bitmap_clear(char *bmap, clus_t c)
+{
+	clus_t cc = c - EXFAT_FIRST_CLUSTER;
+	(((bitmap_t *)(bmap))[BIT_ENTRY(cc)] &= ~BIT_MASK(cc));
+}
+
+void exfat_bitmap_set_range(struct exfat *exfat, char *bitmap,
+			    clus_t start_clus, clus_t count);
+int exfat_bitmap_find_zero(struct exfat *exfat, char *bmap,
+			   clus_t start_clu, clus_t *next);
+int exfat_bitmap_find_one(struct exfat *exfat, char *bmap,
+			  clus_t start_clu, clus_t *next);
+
 void show_version(void);
 
-void exfat_set_bit(struct exfat_blk_dev *bd, char *bitmap,
-		unsigned int clu);
-void exfat_clear_bit(struct exfat_blk_dev *bd, char *bitmap,
-		unsigned int clu);
 wchar_t exfat_bad_char(wchar_t w);
 void boot_calc_checksum(unsigned char *sector, unsigned short size,
 		bool is_boot_sec, __le32 *checksum);
@@ -114,7 +160,15 @@ int exfat_set_volume_serial(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui);
 unsigned int exfat_clus_to_blk_dev_off(struct exfat_blk_dev *bd,
 		unsigned int clu_off, unsigned int clu);
-
+int exfat_get_next_clus(struct exfat *exfat, clus_t clus, clus_t *next);
+int exfat_get_inode_next_clus(struct exfat *exfat, struct exfat_inode *node,
+			      clus_t clus, clus_t *next);
+int exfat_set_fat(struct exfat *exfat, clus_t clus, clus_t next_clus);
+off_t exfat_s2o(struct exfat *exfat, off_t sect);
+off_t exfat_c2o(struct exfat *exfat, unsigned int clus);
+int exfat_o2c(struct exfat *exfat, off_t device_offset,
+	      unsigned int *clu, unsigned int *offset);
+bool exfat_heap_clus(struct exfat *exfat, clus_t clus);
 
 /*
  * Exfat Print

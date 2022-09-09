@@ -46,14 +46,14 @@ static void exfat_setup_boot_sector(struct pbr *ppbr,
 	struct bsx64 *pbsx = &ppbr->bsx;
 	unsigned int i;
 
-	/* Fill exfat BIOS paramemter block */
+	/* Fill exfat BIOS parameter block */
 	pbpb->jmp_boot[0] = 0xeb;
 	pbpb->jmp_boot[1] = 0x76;
 	pbpb->jmp_boot[2] = 0x90;
 	memcpy(pbpb->oem_name, "EXFAT   ", 8);
 	memset(pbpb->res_zero, 0, 53);
 
-	/* Fill exfat extend BIOS paramemter block */
+	/* Fill exfat extend BIOS parameter block */
 	pbsx->vol_offset = cpu_to_le64(bd->offset / bd->sector_size);
 	pbsx->vol_length = cpu_to_le64(bd->size / bd->sector_size);
 	pbsx->fat_offset = cpu_to_le32(finfo.fat_byte_off / bd->sector_size);
@@ -235,9 +235,9 @@ static int write_fat_entry(int fd, __le32 clu,
 		unsigned long long offset)
 {
 	int nbyte;
+	off_t fat_entry_offset = finfo.fat_byte_off + (offset * sizeof(__le32));
 
-	lseek(fd, finfo.fat_byte_off + (offset * sizeof(__le32)), SEEK_SET);
-	nbyte = write(fd, (__u8 *) &clu, sizeof(__le32));
+	nbyte = pwrite(fd, (__u8 *) &clu, sizeof(__le32), fat_entry_offset);
 	if (nbyte != sizeof(int)) {
 		exfat_err("write failed, offset : %llu, clu : %x\n",
 			offset, clu);
@@ -314,15 +314,15 @@ static int exfat_create_bitmap(struct exfat_blk_dev *bd)
 	char *bitmap;
 	unsigned int i, nbytes;
 
-	bitmap = calloc(finfo.bitmap_byte_len, sizeof(*bitmap));
+	bitmap = calloc(round_up(finfo.bitmap_byte_len, sizeof(bitmap_t)),
+			sizeof(*bitmap));
 	if (!bitmap)
 		return -1;
 
-	for (i = 0; i < finfo.used_clu_cnt - EXFAT_FIRST_CLUSTER; i++)
-		exfat_set_bit(bd, bitmap, i);
+	for (i = EXFAT_FIRST_CLUSTER; i < finfo.used_clu_cnt; i++)
+		exfat_bitmap_set(bitmap, i);
 
-	lseek(bd->dev_fd, finfo.bitmap_byte_off, SEEK_SET);
-	nbytes = write(bd->dev_fd, bitmap, finfo.bitmap_byte_len);
+	nbytes = pwrite(bd->dev_fd, bitmap, finfo.bitmap_byte_len, finfo.bitmap_byte_off);
 	if (nbytes != finfo.bitmap_byte_len) {
 		exfat_err("write failed, nbytes : %d, bitmap_len : %d\n",
 			nbytes, finfo.bitmap_byte_len);
@@ -359,8 +359,7 @@ static int exfat_create_root_dir(struct exfat_blk_dev *bd,
 	ed[2].upcase_start_clu = cpu_to_le32(finfo.ut_start_clu);
 	ed[2].upcase_size = cpu_to_le64(EXFAT_UPCASE_TABLE_SIZE);
 
-	lseek(bd->dev_fd, finfo.root_byte_off, SEEK_SET);
-	nbytes = write(bd->dev_fd, ed, dentries_len);
+	nbytes = pwrite(bd->dev_fd, ed, dentries_len, finfo.root_byte_off);
 	if (nbytes != dentries_len) {
 		exfat_err("write failed, nbytes : %d, dentries_len : %d\n",
 			nbytes, dentries_len);
@@ -440,6 +439,11 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	unsigned long long total_clu_cnt;
 	int clu_len;
 
+	if (ui->cluster_size < bd->sector_size) {
+		exfat_err("cluster size (%u bytes) is smaller than sector size (%u bytes)\n",
+			  ui->cluster_size, bd->sector_size);
+		return -1;
+	}
 	if (ui->boundary_align < bd->sector_size) {
 		exfat_err("boundary alignment is too small (min %d)\n",
 				bd->sector_size);
@@ -447,8 +451,12 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	}
 	finfo.fat_byte_off = round_up(bd->offset + 24 * bd->sector_size,
 			ui->boundary_align) - bd->offset;
-	finfo.fat_byte_len = round_up((bd->num_clusters * sizeof(int)),
-		ui->cluster_size);
+	/* Prevent integer overflow when computing the FAT length */
+	if (bd->num_clusters > UINT32_MAX / 4) {
+		exfat_err("cluster size (%u bytes) is too small\n", ui->cluster_size);
+		return -1;
+	}
+	finfo.fat_byte_len = round_up((bd->num_clusters * 4), ui->cluster_size);
 	finfo.clu_byte_off = round_up(bd->offset + finfo.fat_byte_off +
 		finfo.fat_byte_len, ui->boundary_align) - bd->offset;
 	if (bd->size <= finfo.clu_byte_off) {
