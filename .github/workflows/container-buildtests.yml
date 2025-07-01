@@ -1,0 +1,51 @@
+name: Container Buildtests
+
+on:
+  push:
+    branches:
+      - master
+      - exfat-next
+  pull_request:
+    branches:
+      - master
+      - exfat-next
+
+jobs:
+  container-build-alpine:
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Packages
+        run: apk --update add alpine-sdk autoconf libtool automake linux-headers bash xxd xz
+      - name: Autoconf and Configure
+        run: ./autogen.sh && ./configure
+      - name: Build
+        run: make -j$((`nproc`+1))
+      - name: Install
+        run: make install
+      - name: run fsck repair testcases
+        run: |
+          cd tests
+          ./test_fsck.sh
+  container-build-clang-lld:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:unstable
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Packages
+        run: apt update && apt -y install clang lld pkgconf xxd autoconf libtool automake make xz-utils
+      - name: Autoconf and Configure
+        run: |
+          export LDFLAGS="-fuse-ld=lld"
+          ./autogen.sh && ./configure
+      - name: Build
+        run:  make -j$((`nproc`+1))
+      - name: Install
+        run: make install
+      - name: run fsck repair testcases
+        run: |
+          cd tests
+          ./test_fsck.sh

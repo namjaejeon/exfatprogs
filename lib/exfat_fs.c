@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- *   Copyright (C) 2022 Hyunchul Lee <hyc.lee@gmail.com>
+ *   Copyright (C) 2021 LG Electronics.
+ *
+ *   Author(s): Hyunchul Lee <hyc.lee@gmail.com>
  */
 
 #include <stdlib.h>
@@ -20,7 +22,7 @@ struct exfat_inode *exfat_alloc_inode(__u16 attr)
 	int size;
 
 	size = offsetof(struct exfat_inode, name) + NAME_BUFFER_SIZE;
-	node = (struct exfat_inode *)calloc(1, size);
+	node = calloc(1, size);
 	if (!node) {
 		exfat_err("failed to allocate exfat_node\n");
 		return NULL;
@@ -115,19 +117,30 @@ void exfat_free_exfat(struct exfat *exfat)
 			free(exfat->upcase_table);
 		if (exfat->root)
 			exfat_free_inode(exfat->root);
-		if (exfat->zero_cluster)
-			free(exfat->zero_cluster);
+		if (exfat->lookup_buffer)
+			exfat_free_buffer(exfat, exfat->lookup_buffer);
 		free(exfat);
 	}
 }
 
-struct exfat *exfat_alloc_exfat(struct exfat_blk_dev *blk_dev, struct pbr *bs)
+struct exfat *exfat_alloc_exfat(struct exfat_blk_dev *blk_dev, struct pbr *bs,
+		struct exfat_inode *root)
 {
 	struct exfat *exfat;
 
-	exfat = (struct exfat *)calloc(1, sizeof(*exfat));
-	if (!exfat)
+	if (!bs) {
+		if (read_boot_sect(blk_dev, &bs))
+			return NULL;
+	}
+
+	exfat = calloc(1, sizeof(*exfat));
+	if (!exfat) {
+		if (root)
+			exfat_free_inode(root);
+
+		free(bs);
 		return NULL;
+	}
 
 	INIT_LIST_HEAD(&exfat->dir_list);
 	exfat->blk_dev = blk_dev;
@@ -135,75 +148,82 @@ struct exfat *exfat_alloc_exfat(struct exfat_blk_dev *blk_dev, struct pbr *bs)
 	exfat->clus_count = le32_to_cpu(bs->bsx.clu_count);
 	exfat->clus_size = EXFAT_CLUSTER_SIZE(bs);
 	exfat->sect_size = EXFAT_SECTOR_SIZE(bs);
+	exfat->root = root;
 
 	/* TODO: bitmap could be very large. */
-	exfat->alloc_bitmap = (char *)calloc(1,
-			EXFAT_BITMAP_SIZE(exfat->clus_count));
+	exfat->alloc_bitmap = calloc(1, EXFAT_BITMAP_SIZE(exfat->clus_count));
 	if (!exfat->alloc_bitmap) {
 		exfat_err("failed to allocate bitmap\n");
 		goto err;
 	}
 
-	exfat->ohead_bitmap =
-		calloc(1, EXFAT_BITMAP_SIZE(exfat->clus_count));
+	exfat->ohead_bitmap = calloc(1, EXFAT_BITMAP_SIZE(exfat->clus_count));
 	if (!exfat->ohead_bitmap) {
 		exfat_err("failed to allocate bitmap\n");
 		goto err;
 	}
 
-	exfat->disk_bitmap =
-		calloc(1, EXFAT_BITMAP_SIZE(exfat->clus_count));
+	exfat->disk_bitmap = calloc(1, EXFAT_BITMAP_SIZE(exfat->clus_count));
 	if (!exfat->disk_bitmap) {
 		exfat_err("failed to allocate bitmap\n");
 		goto err;
 	}
 
-	exfat->zero_cluster = calloc(1, exfat->clus_size);
-	if (!exfat->zero_cluster) {
-		exfat_err("failed to allocate a zero-filled cluster buffer\n");
+	exfat->buffer_count = ((MAX_EXT_DENTRIES + 1) * DENTRY_SIZE) /
+		exfat_get_read_size(exfat) + 1;
+
+	exfat->start_clu = EXFAT_FIRST_CLUSTER;
+
+	if (exfat->root)
+		return exfat;
+
+	exfat->root = exfat_alloc_inode(ATTR_SUBDIR);
+	if (!exfat->root)
+		goto err;
+
+	exfat->root->first_clus = le32_to_cpu(exfat->bs->bsx.root_cluster);
+
+	if (exfat_root_clus_count(exfat)) {
+		exfat_err("failed to follow the cluster chain of root\n");
 		goto err;
 	}
 
-	exfat->start_clu = EXFAT_FIRST_CLUSTER;
 	return exfat;
 err:
 	exfat_free_exfat(exfat);
 	return NULL;
 }
 
-struct buffer_desc *exfat_alloc_buffer(int count,
-				       unsigned int clu_size, unsigned int sect_size)
+struct buffer_desc *exfat_alloc_buffer(struct exfat *exfat)
 {
 	struct buffer_desc *bd;
-	int i;
+	unsigned int i;
+	unsigned int read_size = exfat_get_read_size(exfat);
 
-	bd = (struct buffer_desc *)calloc(sizeof(*bd), count);
+	bd = calloc(exfat->buffer_count, sizeof(*bd));
 	if (!bd)
 		return NULL;
 
-	for (i = 0; i < count; i++) {
-		bd[i].buffer = (char *)malloc(clu_size);
+	for (i = 0; i < exfat->buffer_count; i++) {
+		bd[i].buffer = malloc(read_size);
 		if (!bd[i].buffer)
 			goto err;
-		bd[i].dirty = (char *)calloc(clu_size / sect_size, 1);
-		if (!bd[i].dirty)
-			goto err;
+
+		memset(&bd[i].dirty, 0, sizeof(bd[i].dirty));
 	}
 	return bd;
 err:
-	exfat_free_buffer(bd, count);
+	exfat_free_buffer(exfat, bd);
 	return NULL;
 }
 
-void exfat_free_buffer(struct buffer_desc *bd, int count)
+void exfat_free_buffer(const struct exfat *exfat, struct buffer_desc *bd)
 {
-	int i;
+	unsigned int i;
 
-	for (i = 0; i < count; i++) {
+	for (i = 0; i < exfat->buffer_count; i++) {
 		if (bd[i].buffer)
 			free(bd[i].buffer);
-		if (bd[i].dirty)
-			free(bd[i].dirty);
 	}
 	free(bd);
 }
@@ -254,8 +274,6 @@ int exfat_resolve_path(struct path_resolve_ctx *ctx, struct exfat_inode *child)
 	int depth, i;
 	int name_len;
 	__le16 *utf16_path;
-	static const __le16 utf16_slash = cpu_to_le16(0x002F);
-	static const __le16 utf16_null = cpu_to_le16(0x0000);
 	size_t in_size;
 
 	ctx->local_path[0] = '\0';
@@ -273,13 +291,13 @@ int exfat_resolve_path(struct path_resolve_ctx *ctx, struct exfat_inode *child)
 		memcpy((char *)utf16_path, (char *)ctx->ancestors[i]->name,
 		       name_len * 2);
 		utf16_path += name_len;
-		memcpy((char *)utf16_path, &utf16_slash, sizeof(utf16_slash));
+		*utf16_path = UTF16_SLASH;
 		utf16_path++;
 	}
 
 	if (depth > 1)
 		utf16_path--;
-	memcpy((char *)utf16_path, &utf16_null, sizeof(utf16_null));
+	*utf16_path = UTF16_NULL;
 	utf16_path++;
 
 	in_size = (utf16_path - ctx->utf16_path) * sizeof(__le16);

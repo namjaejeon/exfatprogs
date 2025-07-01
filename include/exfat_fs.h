@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- *  Copyright (C) 2021 Hyunchul Lee <hyc.lee@gmail.com>
+ *   Copyright (C) 2021 LG Electronics.
+ *
+ *   Author(s): Hyunchul Lee <hyc.lee@gmail.com>
  */
 #ifndef _EXFAT_FS_H_
 #define _EXFAT_FS_H_
@@ -43,7 +45,8 @@ struct exfat {
 	unsigned int		disk_bitmap_size;
 	__u16			*upcase_table;
 	clus_t			start_clu;
-	char			*zero_cluster;
+	unsigned int		buffer_count;
+	struct buffer_desc	*lookup_buffer; /* for dentry set lookup */
 };
 
 struct exfat_dentry_loc {
@@ -62,10 +65,11 @@ struct buffer_desc {
 	__u32		p_clus;
 	unsigned int	offset;
 	char		*buffer;
-	char		*dirty;
+	char		dirty[EXFAT_BITMAP_SIZE(4 * KB / 512)];
 };
 
-struct exfat *exfat_alloc_exfat(struct exfat_blk_dev *blk_dev, struct pbr *bs);
+struct exfat *exfat_alloc_exfat(struct exfat_blk_dev *blk_dev, struct pbr *bs,
+				 struct exfat_inode *root);
 void exfat_free_exfat(struct exfat *exfat);
 
 struct exfat_inode *exfat_alloc_inode(__u16 attr);
@@ -80,7 +84,11 @@ int exfat_resolve_path(struct path_resolve_ctx *ctx, struct exfat_inode *child);
 int exfat_resolve_path_parent(struct path_resolve_ctx *ctx,
 			      struct exfat_inode *parent, struct exfat_inode *child);
 
-struct buffer_desc *exfat_alloc_buffer(int count,
-				       unsigned int clu_size, unsigned int sect_size);
-void exfat_free_buffer(struct buffer_desc *bd, int count);
+struct buffer_desc *exfat_alloc_buffer(struct exfat *exfat);
+void exfat_free_buffer(const struct exfat *exfat, struct buffer_desc *bd);
+
+static inline unsigned int exfat_get_read_size(const struct exfat *exfat)
+{
+	return MIN(exfat->clus_size, 4 * KB);
+}
 #endif

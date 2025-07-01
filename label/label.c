@@ -13,6 +13,7 @@
 
 #include "exfat_ondisk.h"
 #include "libexfat.h"
+#include "exfat_fs.h"
 
 static void usage(void)
 {
@@ -39,9 +40,9 @@ int main(int argc, char *argv[])
 	struct exfat_blk_dev bd;
 	struct exfat_user_input ui;
 	bool version_only = false;
-	off_t root_clu_off;
 	int serial_mode = 0;
 	int flags = 0;
+	unsigned long volume_serial;
 
 	init_user_input(&ui);
 
@@ -77,11 +78,11 @@ int main(int argc, char *argv[])
 	if (version_only)
 		exit(EXIT_FAILURE);
 
-	if (argc < 2)
+	if (argc - optind != 1 && flags != EXFAT_SET_VOLUME_LABEL &&
+	    flags != EXFAT_SET_VOLUME_SERIAL)
 		usage();
 
-	memset(ui.dev_name, 0, sizeof(ui.dev_name));
-	snprintf(ui.dev_name, sizeof(ui.dev_name), "%s", argv[serial_mode + 1]);
+	ui.dev_name = argv[serial_mode + 1];
 
 	ret = exfat_get_blk_dev_info(&ui, &bd);
 	if (ret < 0)
@@ -92,19 +93,35 @@ int main(int argc, char *argv[])
 		if (flags == EXFAT_GET_VOLUME_SERIAL) {
 			ret = exfat_show_volume_serial(bd.dev_fd);
 		} else if (flags == EXFAT_SET_VOLUME_SERIAL) {
-			ui.volume_serial = strtoul(argv[3], NULL, 0);
+			ret = exfat_parse_ulong(argv[3], &volume_serial);
+			if (volume_serial > UINT_MAX)
+				ret = -ERANGE;
+
+
+			if (ret < 0) {
+				exfat_err("invalid serial number(%s)\n", argv[3]);
+				goto close_fd_out;
+			}
+
+			ui.volume_serial = volume_serial;
 			ret = exfat_set_volume_serial(&bd, &ui);
 		}
 	} else {
-		/* Mode to change or display volume label */
-		root_clu_off = exfat_get_root_entry_offset(&bd);
-		if (root_clu_off < 0)
-			goto close_fd_out;
+		struct exfat *exfat;
 
+		exfat = exfat_alloc_exfat(&bd, NULL, NULL);
+		if (!exfat) {
+			ret = -ENOMEM;
+			goto close_fd_out;
+		}
+
+		/* Mode to change or display volume label */
 		if (flags == EXFAT_GET_VOLUME_LABEL)
-			ret = exfat_show_volume_label(&bd, root_clu_off);
+			ret = exfat_read_volume_label(exfat);
 		else if (flags == EXFAT_SET_VOLUME_LABEL)
-			ret = exfat_set_volume_label(&bd, argv[2], root_clu_off);
+			ret = exfat_set_volume_label(exfat, argv[2]);
+
+		exfat_free_exfat(exfat);
 	}
 
 close_fd_out:

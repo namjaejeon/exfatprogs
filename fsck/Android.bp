@@ -4,7 +4,6 @@ cc_binary {
     name: "fsck.exfat",
 
     srcs: [
-        "de_iter.c",
         "fsck.c",
         "repair.c",
     ],

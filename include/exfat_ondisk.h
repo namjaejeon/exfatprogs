@@ -7,23 +7,29 @@
 #define _EXFAT_H
 
 #include <stdint.h>
+#include <byteswap.h>
 #include <linux/fs.h>
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
 
+#define UTF16_NULL	0x0000
+
 #ifdef WORDS_BIGENDIAN
-#define cpu_to_le16(x)	((((x) >> 8) & 0xffu) | (((x) & 0xffu) << 8))
-#define cpu_to_le32(x)	\
-	((((x) & 0xff000000u) >> 24) | (((x) & 0x00ff0000u) >>  8) | \
-	 (((x) & 0x0000ff00u) <<  8) | (((x) & 0x000000ffu) << 24))
-#define cpu_to_le64(x)	(cpu_to_le32((uint64_t)(x)) << 32 | \
-			cpu_to_le32((uint64_t)(x) >> 32))
+#define cpu_to_le16(x)	bswap_16(x)
+#define cpu_to_le32(x)	bswap_32(x)
+#define cpu_to_le64(x)	bswap_64(x)
+
+#define UTF16_DOT	0x2E00  /* . */
+#define UTF16_SLASH	0x2F00  /* / */
 #else
 #define cpu_to_le16(x)	(x)
 #define cpu_to_le32(x)	(x)
 #define cpu_to_le64(x)	(x)
+
+#define UTF16_DOT	0x002E  /* . */
+#define UTF16_SLASH	0x002F  /* / */
 #endif
 
 #define le64_to_cpu(x)  ((uint64_t)cpu_to_le64(x))
@@ -40,15 +46,18 @@
 /* exFAT allows 8388608(256MB) directory entries */
 #define MAX_EXFAT_DENTRIES	8388608
 #define MIN_FILE_DENTRIES	3
+#define MAX_NAME_DENTRIES	17
+#define MAX_EXT_DENTRIES	0xFF
 
 /* dentry types */
 #define MSDOS_DELETED		0xE5	/* deleted mark */
 #define MSDOS_UNUSED		0x00	/* end of directory */
 
 #define EXFAT_LAST		0x00	/* end of directory */
-#define EXFAT_DELETE		~(0x80)
+#define EXFAT_DELETE		((~(0x80)) & 0xFF)
 #define IS_EXFAT_DELETED(x)	((x) < 0x80) /* deleted file (0x01~0x7F) */
 #define EXFAT_INVAL		0x80	/* invalid value */
+#define EXFAT_SEC		(EXFAT_INVAL | (1 << 6))
 #define EXFAT_BITMAP		0x81	/* allocation bitmap */
 #define EXFAT_UPCASE		0x82	/* upcase table */
 #define EXFAT_VOLUME		0x83	/* volume label */
@@ -59,6 +68,9 @@
 #define EXFAT_STREAM		0xC0	/* stream entry */
 #define EXFAT_NAME		0xC1	/* file name entry */
 #define EXFAT_ACL		0xC2	/* stream entry */
+#define EXFAT_VENDOR_EXT	0xE0
+#define EXFAT_VENDOR_ALLOC	0xE1
+#define IS_EXFAT_SEC(x)		((x) >= EXFAT_SEC)
 
 /* checksum types */
 #define CS_DIR_ENTRY		0
@@ -133,6 +145,7 @@ struct pbr {
 };
 
 #define VOLUME_LABEL_MAX_LEN	11
+#define EXFAT_GUID_LEN		16
 #define ENTRY_NAME_MAX		15
 
 struct exfat_dentry {
@@ -190,6 +203,26 @@ struct exfat_dentry {
 			__le32 start_clu;
 			__le64 size;
 		} __attribute__((packed)) upcase; /* up-case table directory entry */
+		struct {
+			__u8 num_ext;
+			__le16 checksum;
+			__u16 flags;
+			__u8 guid[EXFAT_GUID_LEN];
+			__u8 reserved[10];
+		} __attribute__((packed)) guid; /* volume GUID directory entry */
+		struct {
+			__u8 flags;
+			__u8 guid[EXFAT_GUID_LEN];
+			__u8 vendor_defined[14];
+		} __attribute__((packed)) vendor_ext ; /* vendor extension entry */
+		struct {
+			__u8 flags;
+			__u8 guid[EXFAT_GUID_LEN];
+			__u8 vendor_defined[2];
+			__le32 start_clu;
+			__le64 size;
+		} __attribute__((packed)) vendor_alloc; /* vendor allocation entry */
+
 	} __attribute__((packed)) dentry;
 } __attribute__((packed));
 
@@ -207,6 +240,9 @@ struct exfat_dentry {
 #define file_create_time_ms		dentry.file.create_time_ms
 #define file_modify_time_ms		dentry.file.modify_time_ms
 #define file_access_time_ms		dentry.file.access_time_ms
+#define file_create_tz			dentry.file.create_tz
+#define file_modify_tz			dentry.file.modify_tz
+#define file_access_tz			dentry.file.access_tz
 #define stream_flags			dentry.stream.flags
 #define stream_name_len			dentry.stream.name_len
 #define stream_name_hash		dentry.stream.name_hash
@@ -221,5 +257,8 @@ struct exfat_dentry {
 #define upcase_start_clu		dentry.upcase.start_clu
 #define upcase_size			dentry.upcase.size
 #define upcase_checksum			dentry.upcase.checksum
+#define vendor_alloc_flags		dentry.vendor_alloc.flags
+#define vendor_alloc_start_clu		dentry.vendor_alloc.start_clu
+#define vendor_alloc_size		dentry.vendor_alloc.size
 
 #endif /* !_EXFAT_H */

@@ -1,0 +1,72 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches:
+    - master
+    - exfat-next
+  pull_request:
+    branches:
+    - master
+    - exfat-next
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: before test
+      run: |
+        sudo apt-get update
+        sudo apt-get install linux-headers-$(uname -r) xz-utils \
+                             gcc-mips-linux-gnu qemu-system-mips \
+                             qemu-user
+        git clone https://github.com/namjaejeon/linux-exfat-oot
+        export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+        export PATH=/usr/local/lib:$PATH
+    - name: build test & install exfatprogs
+      run: |
+        ./autogen.sh > /dev/null
+        ./configure > /dev/null
+        make -j$((`nproc`+1)) > /dev/null
+        sudo make install > /dev/null
+        make distclean > /dev/null
+        ./configure --host=mips-linux-gnu CFLAGS=--static > /dev/null
+        make -j$((`nproc`+1)) > /dev/null
+    - name: run fsck repair testcases
+      run: |
+        cd tests
+        export FSCK1="qemu-mips ../fsck/fsck.exfat"
+        export FSCK2="fsck.exfat"
+        sudo -E ./test_fsck.sh
+        export FSCK1="fsck.exfat"
+        export FSCK2="qemu-mips ../fsck/fsck.exfat"
+        sudo -E ./test_fsck.sh
+    - name: create file/director test
+      run: |
+        cd linux-exfat-oot
+        make > /dev/null
+        sudo make install > /dev/null
+        sudo modprobe exfat
+        sudo mkdir -p /mnt/test
+        cd ..
+        truncate -s 10G test.img
+        sudo losetup /dev/loop22 test.img
+        sudo mkfs.exfat /dev/loop22
+        sudo mount -t exfat /dev/loop22 /mnt/test/
+        cd /mnt/test/
+        i=1;while [ $i -le 10000 ];do sudo touch file$i;if [ $? != 0 ]; then exit 1; fi; i=$(($i + 1));done
+        sync
+        sudo rm -rf *
+        i=1;while [ $i -le 10000 ];do sudo mkdir dir$i;if [ $? != 0 ]; then exit 1; fi; i=$(($i + 1));done
+        sync
+        sudo rm -rf *
+        i=1;while [ $i -le 10000 ];do sudo touch file$i;if [ $? != 0 ]; then exit 1; fi; i=$(($i + 1));done
+        i=1;while [ $i -le 10000 ];do sudo mkdir dir$i;if [ $? != 0 ]; then exit 1; fi; i=$(($i + 1));done
+        sync
+        sudo fsck.exfat /dev/loop22
+        sudo find . -delete
+        sudo fsck.exfat /dev/loop22
+        cd -
