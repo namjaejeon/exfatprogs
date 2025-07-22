@@ -436,8 +436,8 @@ static const struct option opts[] = {
  */
 static int exfat_pack_bitmap(const struct exfat_user_input *ui)
 {
-	unsigned int fat_byte_end = finfo.fat_byte_off + finfo.fat_byte_len,
-		bitmap_byte_len = finfo.bitmap_byte_len,
+	unsigned long long fat_byte_end = finfo.fat_byte_off + finfo.fat_byte_len;
+	unsigned int bitmap_byte_len = finfo.bitmap_byte_len,
 		bitmap_clu_len = round_up(bitmap_byte_len, ui->cluster_size),
 		bitmap_clu_cnt, total_clu_cnt, new_bitmap_clu_len;
 
@@ -479,19 +479,21 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 				bd->sector_size);
 		return -1;
 	}
+
 	finfo.fat_byte_off = round_up(bd->offset + 24 * bd->sector_size,
 			ui->boundary_align) - bd->offset;
-
 	max_clusters = (bd->size - finfo.fat_byte_off - 8 * num_fats - 1) /
 		(ui->cluster_size + 4 * num_fats) + 1;
+	finfo.fat_byte_len = round_up((max_clusters + 2) * 4,
+			(unsigned long long)bd->sector_size);
 	/* Prevent integer overflow when computing the FAT length */
-	if (max_clusters > UINT_MAX / 4 - 2) {
+	if (finfo.fat_byte_len / bd->sector_size > UINT_MAX) {
 		exfat_err("cluster size (%u bytes) is too small\n", ui->cluster_size);
 		return -1;
 	}
-	finfo.fat_byte_len = round_up((max_clusters + 2) * 4, bd->sector_size);
 	finfo.clu_byte_off = round_up(bd->offset + finfo.fat_byte_off +
-		finfo.fat_byte_len * num_fats, ui->boundary_align) - bd->offset;
+			finfo.fat_byte_len * num_fats,
+				(unsigned long long)ui->boundary_align) - bd->offset;
 	if (bd->size <= finfo.clu_byte_off) {
 		exfat_err("boundary alignment is too big\n");
 		return -1;
@@ -507,12 +509,14 @@ static int exfat_build_mkfs_info(struct exfat_blk_dev *bd,
 	finfo.bitmap_byte_len = round_up(finfo.total_clu_cnt, 8) / 8;
 	if (ui->pack_bitmap)
 		exfat_pack_bitmap(ui);
-	clu_len = round_up(finfo.bitmap_byte_len, ui->cluster_size);
+	clu_len = round_up(finfo.bitmap_byte_len,
+			(unsigned long long)ui->cluster_size);
 
 	finfo.ut_start_clu = EXFAT_FIRST_CLUSTER + clu_len / ui->cluster_size;
 	finfo.ut_byte_off = finfo.bitmap_byte_off + clu_len;
 	finfo.ut_byte_len = EXFAT_UPCASE_TABLE_SIZE;
-	clu_len = round_up(finfo.ut_byte_len, ui->cluster_size);
+	clu_len = round_up(finfo.ut_byte_len,
+			(unsigned long long)ui->cluster_size);
 
 	finfo.root_start_clu = finfo.ut_start_clu + clu_len / ui->cluster_size;
 	finfo.root_byte_off = finfo.ut_byte_off + clu_len;
